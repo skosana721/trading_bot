@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Trading Bot - XM Integration</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.15);
+        }
+
+        .card h2 {
+            color: #4a5568;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+            color: white;
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(72, 187, 120, 0.4);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(245, 101, 101, 0.4);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%);
+            color: white;
+        }
+
+                 .btn-warning:hover {
+             transform: translateY(-2px);
+             box-shadow: 0 5px 15px rgba(237, 137, 54, 0.4);
+         }
+         
+         .btn-outline {
+             background: transparent;
+             border: 2px solid #667eea;
+             color: #667eea;
+         }
+         
+         .btn-outline:hover {
+             background: #667eea;
+             color: white;
+             transform: translateY(-1px);
+         }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-connected {
+            background: #48bb78;
+            box-shadow: 0 0 10px rgba(72, 187, 120, 0.5);
+        }
+
+        .status-disconnected {
+            background: #f56565;
+            box-shadow: 0 0 10px rgba(245, 101, 101, 0.5);
+        }
+
+        .status-running {
+            background: #ed8936;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid;
+        }
+
+        .alert-success {
+            background: #f0fff4;
+            border-color: #48bb78;
+            color: #22543d;
+        }
+
+        .alert-error {
+            background: #fed7d7;
+            border-color: #f56565;
+            color: #742a2a;
+        }
+
+        .alert-warning {
+            background: #fffbeb;
+            border-color: #ed8936;
+            color: #744210;
+        }
+
+        .alert-info {
+            background: #ebf8ff;
+            border-color: #4299e1;
+            color: #2a4365;
+        }
+
+        .analysis-results {
+            background: #f7fafc;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .analysis-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .analysis-item:last-child {
+            border-bottom: none;
+        }
+
+        .analysis-label {
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        .analysis-value {
+            font-weight: 500;
+            color: #2d3748;
+        }
+
+        .entry-conditions {
+            background: #f0fff4;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 10px;
+        }
+
+        .condition-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+            color: #22543d;
+            font-weight: 500;
+        }
+
+        .trading-rules {
+            background: #f7fafc;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 10px;
+        }
+
+        .rule-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+            color: #4a5568;
+            font-weight: 500;
+        }
+
+        .continuation-patterns {
+            background: #ebf8ff;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 10px;
+        }
+
+        .pattern-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+            color: #2a4365;
+            font-weight: 500;
+        }
+
+        .positions-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        .positions-table th,
+        .positions-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .positions-table th {
+            background: #f7fafc;
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        .profit-positive {
+            color: #48bb78;
+            font-weight: 600;
+        }
+
+        .profit-negative {
+            color: #f56565;
+            font-weight: 600;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+        }
+
+        .server-select {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .server-option {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .server-option:hover {
+            border-color: #667eea;
+            background: #f7fafc;
+        }
+
+        .server-option.selected {
+            border-color: #667eea;
+            background: #667eea;
+            color: white;
+        }
+
+        .symbol-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .symbol-option {
+            padding: 8px 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .symbol-option:hover {
+            border-color: #667eea;
+            background: #f7fafc;
+        }
+
+        .symbol-option.selected {
+            border-color: #667eea;
+            background: #667eea;
+            color: white;
+        }
+
+        .timeframe-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 10px;
+        }
+
+        .timeframe-option {
+            padding: 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .timeframe-option:hover {
+            border-color: #667eea;
+            background: #f7fafc;
+        }
+
+        .timeframe-option.selected {
+            border-color: #667eea;
+            background: #667eea;
+            color: white;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+            
+            .symbol-grid {
+                grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="container">
+                         <div class="header">
+                 <h1><i class="fas fa-chart-line"></i> Dynamic Trading Bot</h1>
+                 <p>XM Integration with Machine Learning Analysis & Multi-Trade Support</p>
+                 <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px; margin-top: 10px;">
+                     <small>
+                         <i class="fas fa-info-circle"></i> 
+                         <strong>Multi-Trade Features:</strong> 
+                         Up to 3 concurrent positions per symbol, 
+                         Risk-based position sizing, 
+                         Individual position management
+                     </small>
+                 </div>
+             </div>
+
+            <!-- Connection Status -->
+            <div class="card" style="margin-bottom: 20px;">
+                <h2><i class="fas fa-plug"></i> Connection Status</h2>
+                <div class="analysis-item">
+                    <span class="analysis-label">MT5 Connection:</span>
+                    <span class="analysis-value">
+                        <span :class="['status-indicator', status.connected ? 'status-connected' : 'status-disconnected']"></span>
+                        <span v-text="status.connected ? 'Connected' : 'Disconnected'"></span>
+                    </span>
+                </div>
+                <div class="analysis-item" v-if="status.connected">
+                    <span class="analysis-label">Account Balance:</span>
+                    <span class="analysis-value">$<span v-text="status.account_info ? status.account_info.balance.toFixed(2) : 'N/A'"></span></span>
+                </div>
+                <div class="analysis-item">
+                    <span class="analysis-label">Trading Status:</span>
+                    <span class="analysis-value">
+                        <span :class="['status-indicator', status.running ? 'status-running' : 'status-disconnected']"></span>
+                        <span v-text="status.running ? 'Running' : 'Stopped'"></span>
+                    </span>
+                </div>
+            </div>
+
+            <div class="main-content">
+                <!-- XM Account Configuration -->
+                <div class="card">
+                    <h2><i class="fas fa-user-cog"></i> XM Account Configuration</h2>
+                    
+                    <div v-if="!status.connected">
+                        <div class="form-group">
+                            <label>Account Number:</label>
+                            <input type="text" v-model="config.account_number" class="form-control" placeholder="Enter XM account number">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Password:</label>
+                            <input type="password" v-model="config.password" class="form-control" placeholder="Enter XM password">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Server:</label>
+                            <input type="text" v-model="config.server" class="form-control" placeholder="Enter XM server (e.g., XMGlobal-Demo, XMGlobal-Live)">
+                            <small style="color: #666; margin-top: 5px; display: block;">
+                                Common servers: XMGlobal-Demo (Demo), XMGlobal-Live (Live), or your custom server
+                            </small>
+                            <div style="margin-top: 10px;">
+                                <button type="button" @click="config.server = 'XMGlobal-Demo'" class="btn btn-outline" style="margin-right: 10px; padding: 5px 10px; font-size: 12px;">
+                                    Demo Server
+                                </button>
+                                <button type="button" @click="config.server = 'XMGlobal-Live'" class="btn btn-outline" style="padding: 5px 10px; font-size: 12px;">
+                                    Live Server
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <button @click="connectMT5" class="btn btn-primary" :disabled="connecting">
+                            <span v-if="connecting" class="loading"></span>
+                            <span v-text="connecting ? 'Connecting...' : 'Connect to MT5'"></span>
+                        </button>
+                    </div>
+                    
+                    <div v-else>
+                        <div class="alert alert-success">
+                            <i class="fas fa-check-circle"></i>
+                            Successfully connected to XM account!
+                        </div>
+                        <button @click="disconnectMT5" class="btn btn-danger">
+                            <i class="fas fa-sign-out-alt"></i> Disconnect
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Trading Configuration -->
+                <div class="card">
+                    <h2><i class="fas fa-cogs"></i> Trading Configuration</h2>
+                    
+                    <div class="form-group">
+                        <label>Symbol:</label>
+                        <div class="symbol-grid">
+                            <div v-for="symbol in availableSymbols" 
+                                 :key="symbol"
+                                 class="symbol-option"
+                                 :class="{ selected: config.symbol === symbol }"
+                                 @click="config.symbol = symbol">
+                                <span v-text="symbol"></span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Timeframe:</label>
+                        <div class="timeframe-grid">
+                            <div v-for="tf in availableTimeframes" 
+                                 :key="tf.value"
+                                 class="timeframe-option"
+                                 :class="{ selected: config.timeframe === tf.value }"
+                                 @click="config.timeframe = tf.value">
+                                <span v-text="tf.label"></span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label>Risk Per Trade (%):</label>
+                            <input type="number" v-model="config.risk_per_trade" class="form-control" min="0.1" max="10" step="0.1">
+                        </div>
+                        <div class="form-group">
+                            <label>Account Size ($):</label>
+                            <input type="number" v-model="config.account_size" class="form-control" min="100" step="100">
+                        </div>
+                    </div>
+                    
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="auto-trade" v-model="config.auto_trade">
+                        <label for="auto-trade">Enable Auto Trading</label>
+                    </div>
+                    
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="use-ml" v-model="config.use_ml">
+                        <label for="use-ml">Use Machine Learning</label>
+                    </div>
+                    
+                    <div style="margin-top: 20px;">
+                        <button @click="analyzeMarket" class="btn btn-warning" :disabled="analyzing || !status.connected">
+                            <span v-if="analyzing" class="loading"></span>
+                            <span v-text="analyzing ? 'Analyzing...' : 'Analyze Market'"></span>
+                        </button>
+                        
+                        <button v-if="!status.running" @click="startTrading" class="btn btn-success" :disabled="!analysisResults">
+                            <i class="fas fa-play"></i> Start Trading
+                        </button>
+                        
+                        <button v-else @click="stopTrading" class="btn btn-danger">
+                            <i class="fas fa-stop"></i> Stop Trading
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Analysis Results -->
+            <div class="card" v-if="analysisResults">
+                <h2><i class="fas fa-chart-bar"></i> Analysis Results</h2>
+                
+                <div class="analysis-results">
+                    <div class="analysis-item">
+                        <span class="analysis-label">Symbol:</span>
+                        <span class="analysis-value"><span v-text="analysisResults.symbol || config.symbol"></span></span>
+                    </div>
+                    <div class="analysis-item">
+                        <span class="analysis-label">Timeframe:</span>
+                        <span class="analysis-value"><span v-text="analysisResults.timeframe || config.timeframe"></span></span>
+                    </div>
+                    <div class="analysis-item">
+                        <span class="analysis-label">Uptrend Confirmed:</span>
+                        <span class="analysis-value">
+                            <i :class="analysisResults.uptrend_confirmed ? 'fas fa-check text-success' : 'fas fa-times text-danger'"></i>
+                            <span v-text="analysisResults.uptrend_confirmed ? 'Yes' : 'No'"></span>
+                        </span>
+                    </div>
+                    <div class="analysis-item">
+                        <span class="analysis-label">Overall Strength:</span>
+                        <span class="analysis-value"><span v-text="analysisResults.overall_strength ? analysisResults.overall_strength.toFixed(1) : 'N/A'"></span>/100</span>
+                    </div>
+                    <div class="analysis-item" v-if="analysisResults.primary_timeframe">
+                        <span class="analysis-label">Primary Timeframe:</span>
+                        <span class="analysis-value"><span v-text="analysisResults.primary_timeframe"></span></span>
+                    </div>
+                    <div class="analysis-item" v-if="analysisResults.primary_analysis">
+                        <span class="analysis-label">Primary HH:</span>
+                        <span class="analysis-value"><span v-text="analysisResults.primary_analysis.hh_count"></span></span>
+                    </div>
+                    <div class="analysis-item" v-if="analysisResults.primary_analysis">
+                        <span class="analysis-label">Primary HL:</span>
+                        <span class="analysis-value"><span v-text="analysisResults.primary_analysis.hl_count"></span></span>
+                    </div>
+                    <div class="analysis-item" v-if="analysisResults.h4_analysis">
+                        <span class="analysis-label">H4 HH:</span>
+                        <span class="analysis-value"><span v-text="analysisResults.h4_analysis.hh_count"></span></span>
+                    </div>
+                    <div class="analysis-item" v-if="analysisResults.h4_analysis">
+                        <span class="analysis-label">H4 HL:</span>
+                        <span class="analysis-value"><span v-text="analysisResults.h4_analysis.hl_count"></span></span>
+                    </div>
+                </div>
+
+                <!-- Entry Conditions -->
+                <div v-if="analysisResults.entry_conditions && analysisResults.entry_conditions.length > 0" style="margin-top: 20px;">
+                    <h3><i class="fas fa-list-check"></i> Entry Conditions</h3>
+                    <div class="entry-conditions">
+                        <div v-for="condition in analysisResults.entry_conditions" :key="condition" class="condition-item">
+                            <i class="fas fa-check text-success"></i>
+                            <span v-text="condition"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Trading Rules Compliance -->
+                <div v-if="analysisResults.trading_rules_followed" style="margin-top: 20px;">
+                    <h3><i class="fas fa-clipboard-check"></i> Trading Rules Compliance</h3>
+                    <div class="trading-rules">
+                        <div v-for="(status, rule) in analysisResults.trading_rules_followed" :key="rule" class="rule-item">
+                            <i :class="status ? 'fas fa-check text-success' : 'fas fa-times text-danger'"></i>
+                            <span v-text="rule.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Trading Signals -->
+                <div v-if="analysisResults.breakout_signals && analysisResults.breakout_signals.entry_signal" style="margin-top: 20px;">
+                    <h3><i class="fas fa-signal"></i> Breakout & Retest Signals</h3>
+                    <div class="analysis-results">
+                        <div class="analysis-item">
+                            <span class="analysis-label">Entry Price:</span>
+                            <span class="analysis-value"><span v-text="analysisResults.breakout_signals.entry_price.toFixed(5)"></span></span>
+                        </div>
+                        <div class="analysis-item">
+                            <span class="analysis-label">Stop Loss:</span>
+                            <span class="analysis-value"><span v-text="analysisResults.breakout_signals.stop_loss.toFixed(5)"></span></span>
+                        </div>
+                        <div class="analysis-item">
+                            <span class="analysis-label">Target:</span>
+                            <span class="analysis-value"><span v-text="analysisResults.breakout_signals.target.toFixed(5)"></span></span>
+                        </div>
+                        <div class="analysis-item">
+                            <span class="analysis-label">Pattern Strength:</span>
+                            <span class="analysis-value"><span v-text="analysisResults.breakout_signals.pattern_strength"></span>/100</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Continuation Patterns -->
+                <div v-if="analysisResults.continuation_patterns" style="margin-top: 20px;">
+                    <h3><i class="fas fa-chart-line"></i> Continuation Patterns</h3>
+                    <div class="continuation-patterns">
+                        <div v-if="analysisResults.continuation_patterns.bullish_flag" class="pattern-item">
+                            <i class="fas fa-flag text-success"></i>
+                            <span>Bullish Flag Detected</span>
+                        </div>
+                        <div v-if="analysisResults.continuation_patterns.pennant" class="pattern-item">
+                            <i class="fas fa-flag text-success"></i>
+                            <span>Pennant Detected</span>
+                        </div>
+                        <div v-if="analysisResults.continuation_patterns.inverted_head_shoulders" class="pattern-item">
+                            <i class="fas fa-flag text-success"></i>
+                            <span>Inverted Head & Shoulders Detected</span>
+                        </div>
+                        <div v-if="!analysisResults.continuation_patterns.bullish_flag && !analysisResults.continuation_patterns.pennant && !analysisResults.continuation_patterns.inverted_head_shoulders" class="pattern-item">
+                            <i class="fas fa-info text-info"></i>
+                            <span>No continuation patterns detected</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ML Prediction -->
+                <div v-if="analysisResults.ml_prediction" style="margin-top: 20px;">
+                    <h3><i class="fas fa-brain"></i> Machine Learning Prediction</h3>
+                    <div class="analysis-results">
+                        <div class="analysis-item">
+                            <span class="analysis-label">Prediction:</span>
+                            <span class="analysis-value"><span v-text="analysisResults.ml_prediction.prediction === 1 ? 'BUY' : 'HOLD'"></span></span>
+                        </div>
+                        <div class="analysis-item">
+                            <span class="analysis-label">Confidence:</span>
+                            <span class="analysis-value"><span v-text="(analysisResults.ml_prediction.confidence * 100).toFixed(1)"></span>%</span>
+                        </div>
+                        <div class="analysis-item">
+                            <span class="analysis-label">Buy Probability:</span>
+                            <span class="analysis-value"><span v-text="(analysisResults.ml_prediction.buy_probability * 100).toFixed(1)"></span>%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Open Positions -->
+            <div class="card" v-if="status.positions && status.positions.length > 0">
+                <h2><i class="fas fa-list"></i> Open Positions</h2>
+                
+                <table class="positions-table">
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>Type</th>
+                            <th>Volume</th>
+                            <th>Entry Price</th>
+                            <th>Current Price</th>
+                            <th>Profit</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="position in status.positions" :key="position.ticket">
+                            <td><span v-text="position.symbol"></span></td>
+                            <td><span v-text="position.type"></span></td>
+                            <td><span v-text="position.volume"></span></td>
+                            <td><span v-text="position.price_open.toFixed(5)"></span></td>
+                            <td><span v-text="position.price_current.toFixed(5)"></span></td>
+                            <td :class="position.profit >= 0 ? 'profit-positive' : 'profit-negative'">
+                                $<span v-text="position.profit.toFixed(2)"></span>
+                            </td>
+                            <td>
+                                <button @click="closePosition(position.ticket)" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;">
+                                    Close
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                                 <div style="margin-top: 15px;">
+                     <button @click="closeAllPositions" class="btn btn-danger" style="margin-right: 10px;">
+                         <i class="fas fa-times"></i> Close All Positions
+                     </button>
+                     <button @click="closeSymbolPositions" class="btn btn-warning">
+                         <i class="fas fa-times"></i> Close Symbol Positions
+                     </button>
+                 </div>
+            </div>
+
+            <!-- Alerts -->
+            <div v-if="alerts.length > 0" style="position: fixed; top: 20px; right: 20px; z-index: 1000;">
+                <div v-for="alert in alerts" :key="alert.id" 
+                     :class="['alert', `alert-${alert.type}`]" 
+                     style="margin-bottom: 10px; min-width: 300px;">
+                    <i :class="alertIcon(alert.type)"></i>
+                                         <span v-text="alert.message"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                                         config: {
+                         account_number: '',
+                         password: '',
+                         server: '',
+                         symbol: 'EURUSD',
+                         timeframe: '5m',
+                         risk_per_trade: 2.0,
+                         account_size: 10000,
+                         auto_trade: false,
+                         use_ml: true
+                     },
+                    status: {
+                        connected: false,
+                        running: false,
+                        account_info: null,
+                        positions: []
+                    },
+                    availableSymbols: [
+                        'EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF', 'AUDUSD', 'USDCAD', 'NZDUSD',
+                        'EURGBP', 'EURJPY', 'GBPJPY', 'CHFJPY', 'AUDCAD', 'AUDCHF', 'AUDJPY',
+                        'AUDNZD', 'CADCHF', 'CADJPY', 'EURAUD', 'EURCAD', 'EURCHF', 'EURNZD',
+                        'GBPAUD', 'GBPCAD', 'GBPCHF', 'GBPNZD', 'NZDCAD', 'NZDCHF', 'NZDJPY'
+                    ],
+                    availableTimeframes: [
+                        { value: '1m', label: '1 Minute' },
+                        { value: '5m', label: '5 Minutes' },
+                        { value: '15m', label: '15 Minutes' },
+                        { value: '30m', label: '30 Minutes' },
+                        { value: '1h', label: '1 Hour' },
+                        { value: '4h', label: '4 Hours' },
+                        { value: '1d', label: '1 Day' }
+                    ],
+                    analysisResults: null,
+                    connecting: false,
+                    analyzing: false,
+                    alerts: [],
+                    alertCounter: 0
+                }
+            },
+            mounted() {
+                this.loadConfig();
+                this.updateStatus();
+                // Update status every 5 seconds
+                setInterval(this.updateStatus, 5000);
+            },
+            methods: {
+                async loadConfig() {
+                    try {
+                        const response = await axios.get('/api/config');
+                        if (response.data.config) {
+                            this.config = { ...this.config, ...response.data.config };
+                        }
+                    } catch (error) {
+                        console.error('Error loading config:', error);
+                    }
+                },
+                
+                async updateStatus() {
+                    try {
+                        const response = await axios.get('/api/status');
+                        this.status = response.data;
+                    } catch (error) {
+                        console.error('Error updating status:', error);
+                    }
+                },
+                
+                                 async connectMT5() {
+                     if (!this.config.account_number || !this.config.password || !this.config.server) {
+                         this.showAlert('Please enter account number, password, and server', 'error');
+                         return;
+                     }
+                    
+                    this.connecting = true;
+                    try {
+                        const response = await axios.post('/api/connect', {
+                            account_number: this.config.account_number,
+                            password: this.config.password,
+                            server: this.config.server
+                        });
+                        
+                        if (response.data.success) {
+                            this.showAlert('Successfully connected to MT5!', 'success');
+                            this.status.connected = true;
+                            this.status.account_info = response.data.account_info;
+                        } else {
+                            this.showAlert(response.data.error || 'Connection failed', 'error');
+                        }
+                    } catch (error) {
+                        this.showAlert(error.response?.data?.error || 'Connection failed', 'error');
+                    } finally {
+                        this.connecting = false;
+                    }
+                },
+                
+                async disconnectMT5() {
+                    try {
+                        await axios.post('/api/stop-trading');
+                        this.status.connected = false;
+                        this.status.running = false;
+                        this.showAlert('Disconnected from MT5', 'info');
+                    } catch (error) {
+                        console.error('Error disconnecting:', error);
+                    }
+                },
+                
+                async analyzeMarket() {
+                    if (!this.config.symbol || !this.config.timeframe) {
+                        this.showAlert('Please select symbol and timeframe', 'error');
+                        return;
+                    }
+                    
+                    this.analyzing = true;
+                    try {
+                        const response = await axios.post('/api/analyze', {
+                            symbol: this.config.symbol,
+                            timeframe: this.config.timeframe
+                        });
+                        
+                        if (response.data.success) {
+                            this.analysisResults = response.data;
+                            this.showAlert('Market analysis completed!', 'success');
+                        } else {
+                            this.showAlert(response.data.error || 'Analysis failed', 'error');
+                        }
+                    } catch (error) {
+                        this.showAlert(error.response?.data?.error || 'Analysis failed', 'error');
+                    } finally {
+                        this.analyzing = false;
+                    }
+                },
+                
+                async startTrading() {
+                    try {
+                        const response = await axios.post('/api/start-trading', {
+                            auto_trade: this.config.auto_trade
+                        });
+                        
+                        if (response.data.success) {
+                            this.status.running = true;
+                            this.showAlert('Trading started successfully!', 'success');
+                        } else {
+                            this.showAlert(response.data.error || 'Failed to start trading', 'error');
+                        }
+                    } catch (error) {
+                        this.showAlert(error.response?.data?.error || 'Failed to start trading', 'error');
+                    }
+                },
+                
+                async stopTrading() {
+                    try {
+                        const response = await axios.post('/api/stop-trading');
+                        
+                        if (response.data.success) {
+                            this.status.running = false;
+                            this.showAlert('Trading stopped successfully!', 'warning');
+                        } else {
+                            this.showAlert(response.data.error || 'Failed to stop trading', 'error');
+                        }
+                    } catch (error) {
+                        this.showAlert(error.response?.data?.error || 'Failed to stop trading', 'error');
+                    }
+                },
+                
+                async closePosition(ticket) {
+                    try {
+                        const response = await axios.post(`/api/close-position/${ticket}`);
+                        
+                        if (response.data.success) {
+                            this.showAlert('Position closed successfully!', 'success');
+                            this.updateStatus();
+                        } else {
+                            this.showAlert(response.data.error || 'Failed to close position', 'error');
+                        }
+                    } catch (error) {
+                        this.showAlert(error.response?.data?.error || 'Failed to close position', 'error');
+                    }
+                },
+                
+                                 async closeAllPositions() {
+                     try {
+                         const response = await axios.post('/api/close-positions');
+                         
+                         if (response.data.success) {
+                             this.showAlert('All positions closed!', 'success');
+                             this.updateStatus();
+                         } else {
+                             this.showAlert(response.data.error || 'Failed to close positions', 'error');
+                         }
+                     } catch (error) {
+                         this.showAlert(error.response?.data?.error || 'Failed to close positions', 'error');
+                     }
+                 },
+                 
+                 async closeSymbolPositions() {
+                     try {
+                         const response = await axios.post(`/api/close-symbol-positions/${this.config.symbol}`);
+                         
+                         if (response.data.success) {
+                             this.showAlert(`Positions closed for ${this.config.symbol}!`, 'success');
+                             this.updateStatus();
+                         } else {
+                             this.showAlert(response.data.error || 'Failed to close symbol positions', 'error');
+                         }
+                     } catch (error) {
+                         this.showAlert(error.response?.data?.error || 'Failed to close symbol positions', 'error');
+                     }
+                 },
+                
+                showAlert(message, type = 'info') {
+                    const alert = {
+                        id: ++this.alertCounter,
+                        message,
+                        type
+                    };
+                    
+                    this.alerts.push(alert);
+                    
+                    // Remove alert after 5 seconds
+                    setTimeout(() => {
+                        this.alerts = this.alerts.filter(a => a.id !== alert.id);
+                    }, 5000);
+                },
+                
+                alertIcon(type) {
+                    const icons = {
+                        success: 'fas fa-check-circle',
+                        error: 'fas fa-exclamation-circle',
+                        warning: 'fas fa-exclamation-triangle',
+                        info: 'fas fa-info-circle'
+                    };
+                    return icons[type] || icons.info;
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html> 

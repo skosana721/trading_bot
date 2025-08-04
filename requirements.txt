@@ -1,0 +1,36 @@
+# Core Flask and Web Framework
+Flask
+Flask-CORS
+
+# Data Analysis and Scientific Computing
+pandas
+numpy
+
+# Financial Data and Analysis
+yfinance
+ta
+
+# Machine Learning
+scikit-learn
+joblib
+
+# Visualization
+matplotlib
+plotly
+
+# MetaTrader 5 Integration
+MetaTrader5
+
+# Environment and Configuration
+python-dotenv
+
+# Date and Time Handling
+python-dateutil
+
+# HTTP Requests (for yfinance)
+requests
+
+# Additional Utilities
+lxml
+html5lib
+beautifulsoup4 

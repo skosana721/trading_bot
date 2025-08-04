@@ -1,0 +1,20 @@
+# XM Trading Account Configuration
+# Copy this file to .env and fill in your actual credentials
+
+# XM Account Credentials
+XM_ACCOUNT_NUMBER=your_account_number_here
+XM_PASSWORD=your_password_here
+XM_SERVER=XMGlobal-Demo
+
+# Available servers:
+# XMGlobal-Demo  - Demo account
+# XMGlobal-Live  - Live account
+
+# Trading Bot Configuration
+RISK_PER_TRADE=2.0
+USE_ML=true
+AUTO_TRADE=false
+
+# Flask Application Settings
+FLASK_ENV=development
+FLASK_DEBUG=true 
