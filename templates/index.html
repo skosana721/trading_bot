@@ -170,6 +170,57 @@
              transform: translateY(-1px);
          }
 
+        .alert {
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            font-weight: 500;
+        }
+
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .alert-warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+
+        .alert-info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
         .status-indicator {
             display: inline-block;
             width: 12px;
@@ -179,17 +230,15 @@
         }
 
         .status-connected {
-            background: #48bb78;
-            box-shadow: 0 0 10px rgba(72, 187, 120, 0.5);
+            background-color: #28a745;
         }
 
         .status-disconnected {
-            background: #f56565;
-            box-shadow: 0 0 10px rgba(245, 101, 101, 0.5);
+            background-color: #dc3545;
         }
 
-        .status-running {
-            background: #ed8936;
+        .status-connecting {
+            background-color: #ffc107;
             animation: pulse 2s infinite;
         }
 
@@ -199,35 +248,77 @@
             100% { opacity: 1; }
         }
 
-        .alert {
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            border-left: 4px solid;
+        .metric-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            margin: 10px 0;
         }
 
-        .alert-success {
-            background: #f0fff4;
-            border-color: #48bb78;
-            color: #22543d;
+        .metric-value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin: 10px 0;
         }
 
-        .alert-error {
-            background: #fed7d7;
-            border-color: #f56565;
-            color: #742a2a;
+        .metric-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
         }
 
-        .alert-warning {
-            background: #fffbeb;
-            border-color: #ed8936;
-            color: #744210;
+        .tooltip {
+            position: relative;
+            display: inline-block;
         }
 
-        .alert-info {
-            background: #ebf8ff;
-            border-color: #4299e1;
-            color: #2a4365;
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 200px;
+            background-color: #555;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -100px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .retry-button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+
+        .retry-button:hover {
+            background: #5a6fd8;
+        }
+
+        .error-details {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin-top: 10px;
+            font-family: monospace;
+            font-size: 0.8rem;
+            max-height: 200px;
+            overflow-y: auto;
         }
 
         .analysis-results {
@@ -334,21 +425,6 @@
         .profit-negative {
             color: #f56565;
             font-weight: 600;
-        }
-
-        .loading {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #667eea;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
         }
 
         .grid-2 {
@@ -1164,7 +1240,14 @@
                         connected: false,
                         running: false,
                         account_info: null,
-                        positions: []
+                        positions: [],
+                        connection_details: {
+                            has_bot_instance: false,
+                            has_mt5_connector: false,
+                            mt5_initialized: false,
+                            credentials_configured: false,
+                            connection_healthy: false
+                        }
                     },
                     availableSymbols: [
                         'EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF', 'AUDUSD', 'USDCAD', 'NZDUSD',
@@ -1400,26 +1483,118 @@
                      }
                  },
                  
-                 async closeSymbolPositions() {
-                     try {
-                         const response = await axios.post(`/api/close-symbol-positions/${this.config.symbol}`);
-                         
-                         if (response.data.success) {
-                             this.showAlert(`Positions closed for ${this.config.symbol}!`, 'success');
-                             this.updateStatus();
-                         } else {
-                             this.showAlert(response.data.error || 'Failed to close symbol positions', 'error');
-                         }
-                     } catch (error) {
-                         this.showAlert(error.response?.data?.error || 'Failed to close symbol positions', 'error');
-                     }
-                 },
+                                 async closeSymbolPositions() {
+                    try {
+                        const response = await axios.post(`/api/close-symbol-positions/${this.config.symbol}`);
+                        
+                        if (response.data.success) {
+                            this.showAlert(`Positions closed for ${this.config.symbol}!`, 'success');
+                            this.updateStatus();
+                        } else {
+                            this.showAlert(response.data.error || 'Failed to close symbol positions', 'error');
+                        }
+                    } catch (error) {
+                        this.showAlert(error.response?.data?.error || 'Failed to close symbol positions', 'error');
+                    }
+                },
+                
+                // Enhanced error handling and retry logic
+                async retryOperation(operation, maxRetries = 3) {
+                    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                        try {
+                            return await operation();
+                        } catch (error) {
+                            if (attempt === maxRetries) {
+                                throw error;
+                            }
+                            console.log(`Attempt ${attempt} failed, retrying...`);
+                            await this.delay(1000 * attempt); // Exponential backoff
+                        }
+                    }
+                },
+                
+                delay(ms) {
+                    return new Promise(resolve => setTimeout(resolve, ms));
+                },
+                
+                // Enhanced status update with error handling
+                async updateStatus() {
+                    try {
+                        const response = await this.retryOperation(async () => {
+                            return await axios.get('/api/status');
+                        });
+                        
+                        this.status = response.data;
+                        this.retryCount = 0; // Reset retry count on success
+                    } catch (error) {
+                        this.retryCount++;
+                        console.error('Status update failed:', error);
+                        
+                        if (this.retryCount >= this.maxRetries) {
+                            this.showAlert('Failed to update status after multiple attempts', 'error');
+                            this.errorDetails = error.response?.data || error.message;
+                        }
+                    }
+                },
+                
+                // Start automatic status updates
+                startStatusUpdates() {
+                    if (this.statusUpdateInterval) {
+                        clearInterval(this.statusUpdateInterval);
+                    }
+                    
+                    this.statusUpdateInterval = setInterval(() => {
+                        this.updateStatus();
+                    }, 5000); // Update every 5 seconds
+                },
+                
+                // Stop automatic status updates
+                stopStatusUpdates() {
+                    if (this.statusUpdateInterval) {
+                        clearInterval(this.statusUpdateInterval);
+                        this.statusUpdateInterval = null;
+                    }
+                },
+                
+                // Enhanced connection with better error handling
+                async connectMT5() {
+                    if (!this.config.account_number || !this.config.password || !this.config.server) {
+                        this.showAlert('Please enter account number, password, and server', 'error');
+                        return;
+                    }
+                    
+                    this.connecting = true;
+                    try {
+                        const response = await this.retryOperation(async () => {
+                            return await axios.post('/api/connect', {
+                                account_number: this.config.account_number,
+                                password: this.config.password,
+                                server: this.config.server
+                            });
+                        });
+                        
+                        if (response.data.success) {
+                            this.showAlert('Successfully connected to MT5!', 'success');
+                            this.status.connected = true;
+                            this.status.account_info = response.data.account_info;
+                            this.status.connection_details = response.data.connection_details;
+                            this.retryCount = 0;
+                        } else {
+                            this.showAlert(response.data.error || 'Connection failed', 'error');
+                        }
+                    } catch (error) {
+                        this.showAlert(error.response?.data?.error || 'Connection failed', 'error');
+                        this.errorDetails = error.response?.data || error.message;
+                    } finally {
+                        this.connecting = false;
+                    }
+                },
                 
                 showAlert(message, type = 'info') {
                     const alert = {
-                        id: ++this.alertCounter,
-                        message,
-                        type
+                        id: Date.now(),
+                        message: message,
+                        type: type
                     };
                     
                     this.alerts.push(alert);
