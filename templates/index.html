@@ -98,6 +98,14 @@
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
 
+        .border-purple {
+            border-color: #6f42c1 !important;
+        }
+
+        .bg-purple {
+            background-color: #6f42c1 !important;
+        }
+
         .btn {
             padding: 12px 24px;
             border: none;
@@ -466,6 +474,7 @@
     </style>
 </head>
 <body>
+    {% raw %}
     <div id="app">
         <div class="container">
                          <div class="header">
@@ -606,9 +615,17 @@
                     </div>
                     
                     <div style="margin-top: 20px;">
-                        <button @click="analyzeMarket" class="btn btn-warning" :disabled="analyzing || !status.connected">
+                        <button @click="analyzeMarket" class="btn btn-warning" :disabled="analyzing || !status.connected" style="margin-right: 10px;">
                             <span v-if="analyzing" class="loading"></span>
                             <span v-text="analyzing ? 'Analyzing...' : 'Analyze Market'"></span>
+                        </button>
+                        
+                        <button @click="analyzeSMC" class="btn btn-info" :disabled="analyzing || !status.connected" style="margin-right: 10px;">
+                            <i class="fas fa-brain"></i> Analyze SMC
+                        </button>
+                        
+                        <button @click="getCombinedAnalysis" class="btn btn-primary" :disabled="analyzing || !status.connected" style="margin-right: 10px;">
+                            <i class="fas fa-chart-line"></i> Combined Analysis
                         </button>
                         
                         <button v-if="!status.running" @click="startTrading" class="btn btn-success" :disabled="!analysisResults">
@@ -624,47 +641,168 @@
 
             <!-- Analysis Results -->
             <div class="card" v-if="analysisResults">
-                <h2><i class="fas fa-chart-bar"></i> Analysis Results</h2>
+                <h2><i class="fas fa-chart-bar"></i> Smart Money Concepts Analysis</h2>
                 
+                <!-- Basic Analysis Info -->
                 <div class="analysis-results">
                     <div class="analysis-item">
                         <span class="analysis-label">Symbol:</span>
-                        <span class="analysis-value"><span v-text="analysisResults.symbol || config.symbol"></span></span>
+                        <span class="analysis-value"><strong><span v-text="analysisResults.symbol || config.symbol"></span></strong></span>
                     </div>
                     <div class="analysis-item">
                         <span class="analysis-label">Timeframe:</span>
-                        <span class="analysis-value"><span v-text="analysisResults.timeframe || config.timeframe"></span></span>
+                        <span class="analysis-value"><strong><span v-text="analysisResults.timeframe || config.timeframe"></span></strong></span>
                     </div>
                     <div class="analysis-item">
-                        <span class="analysis-label">Uptrend Confirmed:</span>
+                        <span class="analysis-label">Trend Direction:</span>
                         <span class="analysis-value">
-                            <i :class="analysisResults.uptrend_confirmed ? 'fas fa-check text-success' : 'fas fa-times text-danger'"></i>
-                            <span v-text="analysisResults.uptrend_confirmed ? 'Yes' : 'No'"></span>
+                            <i v-if="analysisResults.analysis && analysisResults.analysis.trend_direction === 'UPTREND'" class="fas fa-arrow-up text-success"></i>
+                            <i v-else-if="analysisResults.analysis && analysisResults.analysis.trend_direction === 'DOWNTREND'" class="fas fa-arrow-down text-danger"></i>
+                            <i v-else class="fas fa-arrows-left-right text-warning"></i>
+                            <strong><span v-text="analysisResults.analysis ? analysisResults.analysis.trend_direction || 'SIDEWAYS' : 'N/A'"></span></strong>
                         </span>
                     </div>
                     <div class="analysis-item">
                         <span class="analysis-label">Overall Strength:</span>
-                        <span class="analysis-value"><span v-text="analysisResults.overall_strength ? analysisResults.overall_strength.toFixed(1) : 'N/A'"></span>/100</span>
+                        <span class="analysis-value">
+                            <strong><span v-text="analysisResults.analysis && analysisResults.analysis.overall_strength ? analysisResults.analysis.overall_strength.toFixed(1) : 'N/A'"></span>/100</strong>
+                        </span>
                     </div>
-                    <div class="analysis-item" v-if="analysisResults.primary_timeframe">
-                        <span class="analysis-label">Primary Timeframe:</span>
-                        <span class="analysis-value"><span v-text="analysisResults.primary_timeframe"></span></span>
+                    <div class="analysis-item" v-if="analysisResults.analysis && analysisResults.analysis.smc_bias">
+                        <span class="analysis-label">SMC Bias:</span>
+                        <span class="analysis-value">
+                            <i v-if="analysisResults.analysis.smc_bias === 'BULLISH'" class="fas fa-bull text-success"></i>
+                            <i v-else-if="analysisResults.analysis.smc_bias === 'BEARISH'" class="fas fa-bear text-danger"></i>
+                            <i v-else class="fas fa-balance-scale text-warning"></i>
+                            <strong><span v-text="analysisResults.analysis.smc_bias"></span></strong>
+                        </span>
                     </div>
-                    <div class="analysis-item" v-if="analysisResults.primary_analysis">
-                        <span class="analysis-label">Primary HH:</span>
-                        <span class="analysis-value"><span v-text="analysisResults.primary_analysis.hh_count"></span></span>
+                    <div class="analysis-item" v-if="analysisResults.analysis && analysisResults.analysis.smc_score">
+                        <span class="analysis-label">SMC Score:</span>
+                        <span class="analysis-value">
+                            <strong><span v-text="analysisResults.analysis.smc_score.toFixed(1)"></span>/100</strong>
+                        </span>
                     </div>
-                    <div class="analysis-item" v-if="analysisResults.primary_analysis">
-                        <span class="analysis-label">Primary HL:</span>
-                        <span class="analysis-value"><span v-text="analysisResults.primary_analysis.hl_count"></span></span>
+                </div>
+
+                <!-- Smart Money Concepts Details -->
+                <div v-if="analysisResults.smc" style="margin-top: 20px;">
+                    <h3><i class="fas fa-brain"></i> Smart Money Concepts Analysis</h3>
+                    <div class="smc-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;">
+                        
+                        <!-- Order Blocks -->
+                        <div class="smc-item" style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #007bff;">
+                            <h4 style="margin: 0 0 10px 0; color: #007bff;"><i class="fas fa-cube"></i> Order Blocks</h4>
+                            <div v-if="analysisResults.smc.order_blocks && typeof analysisResults.smc.order_blocks === 'object'">
+                                <div><strong>Total:</strong> <span v-text="analysisResults.smc.order_blocks.total || 0"></span></div>
+                                <div><strong>Bullish:</strong> <span v-text="analysisResults.smc.order_blocks.bullish || 0"></span></div>
+                                <div><strong>Bearish:</strong> <span v-text="analysisResults.smc.order_blocks.bearish || 0"></span></div>
+                            </div>
+                            <div v-else>
+                                <div><strong>Found:</strong> <span v-text="analysisResults.smc.order_blocks || 0"></span></div>
+                            </div>
+                        </div>
+
+                        <!-- Fair Value Gaps -->
+                        <div class="smc-item" style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #28a745;">
+                            <h4 style="margin: 0 0 10px 0; color: #28a745;"><i class="fas fa-gap"></i> Fair Value Gaps</h4>
+                            <div v-if="analysisResults.smc.fair_value_gaps && typeof analysisResults.smc.fair_value_gaps === 'object'">
+                                <div><strong>Total:</strong> <span v-text="analysisResults.smc.fair_value_gaps.total || 0"></span></div>
+                                <div><strong>Bullish:</strong> <span v-text="analysisResults.smc.fair_value_gaps.bullish || 0"></span></div>
+                                <div><strong>Bearish:</strong> <span v-text="analysisResults.smc.fair_value_gaps.bearish || 0"></span></div>
+                            </div>
+                            <div v-else>
+                                <div><strong>Found:</strong> <span v-text="analysisResults.smc.fair_value_gaps || 0"></span></div>
+                            </div>
+                        </div>
+
+                        <!-- BOS/ChoCH -->
+                        <div class="smc-item" style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107;">
+                            <h4 style="margin: 0 0 10px 0; color: #ffc107;"><i class="fas fa-exchange-alt"></i> Structure Breaks</h4>
+                            <div><strong>BOS/ChoCH:</strong> <span v-text="analysisResults.smc.bos_choch_patterns || 0"></span></div>
+                        </div>
+
+                        <!-- Liquidity Zones -->
+                        <div class="smc-item" style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #6f42c1;">
+                            <h4 style="margin: 0 0 10px 0; color: #6f42c1;"><i class="fas fa-water"></i> Liquidity Zones</h4>
+                            <div v-if="analysisResults.smc.liquidity_zones && typeof analysisResults.smc.liquidity_zones === 'object'">
+                                <div><strong>Total:</strong> <span v-text="analysisResults.smc.liquidity_zones.total || 0"></span></div>
+                                <div><strong>Support:</strong> <span v-text="analysisResults.smc.liquidity_zones.support || 0"></span></div>
+                                <div><strong>Resistance:</strong> <span v-text="analysisResults.smc.liquidity_zones.resistance || 0"></span></div>
+                            </div>
+                            <div v-else>
+                                <div><strong>Found:</strong> <span v-text="analysisResults.smc.liquidity_zones || 0"></span></div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="analysis-item" v-if="analysisResults.h4_analysis">
-                        <span class="analysis-label">H4 HH:</span>
-                        <span class="analysis-value"><span v-text="analysisResults.h4_analysis.hh_count"></span></span>
+
+                    <!-- Market Structure -->
+                    <div v-if="analysisResults.smc.market_structure" style="margin-top: 20px;">
+                        <h4><i class="fas fa-chart-line"></i> Market Structure</h4>
+                        <div class="analysis-results">
+                            <div class="analysis-item">
+                                <span class="analysis-label">Trend:</span>
+                                <span class="analysis-value"><span v-text="analysisResults.smc.market_structure.trend || 'Unknown'"></span></span>
+                            </div>
+                            <div class="analysis-item">
+                                <span class="analysis-label">Phase:</span>
+                                <span class="analysis-value"><span v-text="analysisResults.smc.market_structure.phase || 'Unknown'"></span></span>
+                            </div>
+                            <div class="analysis-item">
+                                <span class="analysis-label">Volatility:</span>
+                                <span class="analysis-value"><span v-text="analysisResults.smc.market_structure.volatility || 'Unknown'"></span></span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="analysis-item" v-if="analysisResults.h4_analysis">
-                        <span class="analysis-label">H4 HL:</span>
-                        <span class="analysis-value"><span v-text="analysisResults.h4_analysis.hl_count"></span></span>
+
+                    <!-- Confidence Breakdown -->
+                    <div v-if="analysisResults.smc.confidence_breakdown" style="margin-top: 20px;">
+                        <h4><i class="fas fa-chart-pie"></i> Confidence Breakdown</h4>
+                        <div class="analysis-results">
+                            <div class="analysis-item">
+                                <span class="analysis-label">Traditional Strength:</span>
+                                <span class="analysis-value"><span v-text="analysisResults.smc.confidence_breakdown.traditional_strength.toFixed(1)"></span>/100</span>
+                            </div>
+                            <div class="analysis-item">
+                                <span class="analysis-label">SMC Score:</span>
+                                <span class="analysis-value"><span v-text="analysisResults.smc.confidence_breakdown.smc_score.toFixed(1)"></span>/100</span>
+                            </div>
+                            <div class="analysis-item">
+                                <span class="analysis-label">Combined Confidence:</span>
+                                <span class="analysis-value"><strong><span v-text="analysisResults.smc.confidence_breakdown.combined_confidence.toFixed(1)"></span>/100</strong></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Trading Signals -->
+                <div v-if="analysisResults.signals" style="margin-top: 20px;">
+                    <h3><i class="fas fa-signal"></i> Trading Signals</h3>
+                    <div class="signal-box" :style="'background: ' + (analysisResults.signals.signal_type === 'BUY' ? '#d4edda' : analysisResults.signals.signal_type === 'SELL' ? '#f8d7da' : '#fff3cd') + '; padding: 15px; border-radius: 8px; border-left: 4px solid ' + (analysisResults.signals.signal_type === 'BUY' ? '#28a745' : analysisResults.signals.signal_type === 'SELL' ? '#dc3545' : '#ffc107') + ';'">
+                        <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                            <i :class="'fas fa-' + (analysisResults.signals.signal_type === 'BUY' ? 'arrow-up' : analysisResults.signals.signal_type === 'SELL' ? 'arrow-down' : 'pause') + ' ' + (analysisResults.signals.signal_type === 'BUY' ? 'text-success' : analysisResults.signals.signal_type === 'SELL' ? 'text-danger' : 'text-warning')" style="font-size: 24px; margin-right: 10px;"></i>
+                            <h4 style="margin: 0;"><span v-text="analysisResults.signals.signal_type || 'NO SIGNAL'"></span> Signal</h4>
+                            <span style="margin-left: auto; font-weight: bold; font-size: 18px;"><span v-text="analysisResults.signals.signal_confidence || 0"></span>% Confidence</span>
+                        </div>
+                        
+                        <div class="signal-details" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;">
+                            <div><strong>Entry:</strong> <span v-text="analysisResults.signals.entry_price ? analysisResults.signals.entry_price.toFixed(5) : 'N/A'"></span></div>
+                            <div><strong>Stop Loss:</strong> <span v-text="analysisResults.signals.stop_loss ? analysisResults.signals.stop_loss.toFixed(5) : 'N/A'"></span></div>
+                            <div><strong>Target:</strong> <span v-text="analysisResults.signals.target ? analysisResults.signals.target.toFixed(5) : 'N/A'"></span></div>
+                            <div><strong>Risk/Reward:</strong> 1:<span v-text="analysisResults.signals.risk_reward_ratio ? analysisResults.signals.risk_reward_ratio.toFixed(1) : 'N/A'"></span></div>
+                            <div><strong>Position Size:</strong> <span v-text="analysisResults.signals.position_size ? analysisResults.signals.position_size.toFixed(2) : 'N/A'"></span> lots</div>
+                            <div><strong>Risk Amount:</strong> $<span v-text="analysisResults.signals.risk_amount ? analysisResults.signals.risk_amount.toFixed(2) : 'N/A'"></span></div>
+                        </div>
+
+                        <!-- SMC Context -->
+                        <div v-if="analysisResults.signals.smc_context" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #dee2e6;">
+                            <h5><i class="fas fa-brain"></i> SMC Context</h5>
+                            <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                                <div v-if="analysisResults.signals.smc_context.order_blocks"><strong>Order Blocks:</strong> <span v-text="analysisResults.signals.smc_context.order_blocks"></span></div>
+                                <div v-if="analysisResults.signals.smc_context.fair_value_gaps"><strong>FVGs:</strong> <span v-text="analysisResults.signals.smc_context.fair_value_gaps"></span></div>
+                                <div v-if="analysisResults.signals.smc_context.structure_breaks"><strong>BOS:</strong> <span v-text="analysisResults.signals.smc_context.structure_breaks"></span></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -754,6 +892,204 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Smart Money Concept Analysis -->
+                <div v-if="smcAnalysis" style="margin-top: 20px;">
+                    <h3><i class="fas fa-brain"></i> Smart Money Concept Analysis</h3>
+                    <div class="row">
+                        <!-- Market Structure -->
+                        <div class="col-md-6 mb-3">
+                            <div class="card border-primary">
+                                <div class="card-header bg-primary text-white">
+                                    <h6 class="mb-0">Market Structure</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Trend Direction:</span>
+                                        <span :class="getTrendClass(smcAnalysis.market_structure.trend_direction)">
+                                            {{ smcAnalysis.market_structure.trend_direction }}
+                                        </span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Higher Highs:</span>
+                                        <span class="text-success">{{ smcAnalysis.market_structure.higher_highs_count }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Higher Lows:</span>
+                                        <span class="text-success">{{ smcAnalysis.market_structure.higher_lows_count }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Lower Highs:</span>
+                                        <span class="text-danger">{{ smcAnalysis.market_structure.lower_highs_count }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Lower Lows:</span>
+                                        <span class="text-danger">{{ smcAnalysis.market_structure.lower_lows_count }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Break of Structure:</span>
+                                        <span class="text-warning">{{ smcAnalysis.market_structure.bos_count }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span>Change of Character:</span>
+                                        <span class="text-info">{{ smcAnalysis.market_structure.choch_count }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Order Blocks -->
+                        <div class="col-md-6 mb-3">
+                            <div class="card border-success">
+                                <div class="card-header bg-success text-white">
+                                    <h6 class="mb-0">Order Blocks</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Total:</span>
+                                        <span class="text-primary">{{ smcAnalysis.order_blocks.total }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Bullish:</span>
+                                        <span class="text-success">{{ smcAnalysis.order_blocks.bullish }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Bearish:</span>
+                                        <span class="text-danger">{{ smcAnalysis.order_blocks.bearish }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Mitigated:</span>
+                                        <span class="text-warning">{{ smcAnalysis.order_blocks.mitigated }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span>Avg Strength:</span>
+                                        <span class="text-info">{{ smcAnalysis.order_blocks.average_strength }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Fair Value Gaps -->
+                        <div class="col-md-6 mb-3">
+                            <div class="card border-warning">
+                                <div class="card-header bg-warning text-dark">
+                                    <h6 class="mb-0">Fair Value Gaps</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Total:</span>
+                                        <span class="text-primary">{{ smcAnalysis.fair_value_gaps.total }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Bullish:</span>
+                                        <span class="text-success">{{ smcAnalysis.fair_value_gaps.bullish }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Bearish:</span>
+                                        <span class="text-danger">{{ smcAnalysis.fair_value_gaps.bearish }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Mitigated:</span>
+                                        <span class="text-warning">{{ smcAnalysis.fair_value_gaps.mitigated }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span>Avg Gap Size:</span>
+                                        <span class="text-info">{{ smcAnalysis.fair_value_gaps.average_gap_size }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Liquidity Zones -->
+                        <div class="col-md-6 mb-3">
+                            <div class="card border-info">
+                                <div class="card-header bg-info text-white">
+                                    <h6 class="mb-0">Liquidity Zones</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Total:</span>
+                                        <span class="text-primary">{{ smcAnalysis.liquidity_zones.total }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Equal Highs:</span>
+                                        <span class="text-success">{{ smcAnalysis.liquidity_zones.equal_highs }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Equal Lows:</span>
+                                        <span class="text-danger">{{ smcAnalysis.liquidity_zones.equal_lows }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span>Avg Strength:</span>
+                                        <span class="text-info">{{ smcAnalysis.liquidity_zones.average_strength }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Institutional Order Blocks -->
+                        <div class="col-md-6 mb-3">
+                            <div class="card border-dark">
+                                <div class="card-header bg-dark text-white">
+                                    <h6 class="mb-0">Institutional Order Blocks</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Total:</span>
+                                        <span class="text-primary">{{ smcAnalysis.institutional_order_blocks.total }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Bullish:</span>
+                                        <span class="text-success">{{ smcAnalysis.institutional_order_blocks.bullish }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Bearish:</span>
+                                        <span class="text-danger">{{ smcAnalysis.institutional_order_blocks.bearish }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span>Avg Volume Ratio:</span>
+                                        <span class="text-info">{{ smcAnalysis.institutional_order_blocks.average_volume_ratio }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- SMC Signals -->
+                        <div class="col-md-6 mb-3">
+                            <div class="card border-purple">
+                                <div class="card-header bg-purple text-white">
+                                    <h6 class="mb-0">SMC Signals</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Order Block Signals:</span>
+                                        <span class="text-primary">{{ smcAnalysis.signals.order_block_signals }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>FVG Signals:</span>
+                                        <span class="text-warning">{{ smcAnalysis.signals.fvg_signals }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Liquidity Signals:</span>
+                                        <span class="text-info">{{ smcAnalysis.signals.liquidity_signals }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Market Structure:</span>
+                                        <span class="text-success">{{ smcAnalysis.signals.market_structure_signals }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Premium/Discount:</span>
+                                        <span class="text-secondary">{{ smcAnalysis.signals.premium_discount_signals }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span>Institutional:</span>
+                                        <span class="text-dark">{{ smcAnalysis.signals.institutional_signals }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Open Positions -->
@@ -812,6 +1148,7 @@
             </div>
         </div>
     </div>
+    {% endraw %}
 
     <script>
         const { createApp } = Vue;
@@ -819,17 +1156,17 @@
         createApp({
             data() {
                 return {
-                                         config: {
-                         account_number: '',
-                         password: '',
-                         server: '',
-                         symbol: 'EURUSD',
-                         timeframe: '5m',
-                         risk_per_trade: 2.0,
-                         account_size: 10000,
-                         auto_trade: false,
-                         use_ml: true
-                     },
+                    config: {
+                        account_number: '12345678',
+                        password: 'your_password_here',
+                        server: 'XMGlobal-Demo',
+                        symbol: 'EURUSD',
+                        timeframe: '5m',
+                        risk_per_trade: 2.0,
+                        account_size: 10000,
+                        auto_trade: false,
+                        use_ml: true
+                    },
                     status: {
                         connected: false,
                         running: false,
@@ -852,6 +1189,7 @@
                         { value: '1d', label: '1 Day' }
                     ],
                     analysisResults: null,
+                    smcAnalysis: null,
                     connecting: false,
                     analyzing: false,
                     alerts: [],
@@ -867,12 +1205,17 @@
             methods: {
                 async loadConfig() {
                     try {
-                        const response = await axios.get('/api/config');
+                        const response = await axios.get('/api/env-config');
                         if (response.data.config) {
                             this.config = { ...this.config, ...response.data.config };
                         }
+                        this.availableSymbols = response.data.available_symbols;
+                        this.availableTimeframes = response.data.available_timeframes;
+                        // Initialize demo mode based on server setting
+                        this.isDemoMode = this.config.server === 'XMGlobal-Demo';
                     } catch (error) {
                         console.error('Error loading config:', error);
+                        this.showAlert('Failed to load configuration from .env file', 'error');
                     }
                 },
                 
@@ -948,6 +1291,58 @@
                     } finally {
                         this.analyzing = false;
                     }
+                },
+                
+                async analyzeSMC() {
+                    if (!this.config.symbol || !this.config.timeframe) {
+                        this.showAlert('Please select a symbol and timeframe', 'warning');
+                        return;
+                    }
+                    
+                    this.analyzing = true;
+                    try {
+                        const response = await axios.get(`/api/smc_analysis/${this.config.symbol}/${this.config.timeframe}`);
+                        
+                        if (response.data) {
+                            this.smcAnalysis = response.data;
+                            this.showAlert('Smart Money Concept analysis completed!', 'success');
+                        } else {
+                            this.showAlert('SMC analysis failed', 'error');
+                        }
+                    } catch (error) {
+                        this.showAlert(error.response?.data?.error || 'SMC analysis failed', 'error');
+                    } finally {
+                        this.analyzing = false;
+                    }
+                },
+                
+                async getCombinedAnalysis() {
+                    if (!this.config.symbol || !this.config.timeframe) {
+                        this.showAlert('Please select a symbol and timeframe', 'warning');
+                        return;
+                    }
+                    
+                    this.analyzing = true;
+                    try {
+                        const response = await axios.get(`/api/combined_analysis/${this.config.symbol}/${this.config.timeframe}`);
+                        
+                        if (response.data) {
+                            this.analysisResults = response.data;
+                            this.showAlert('Combined analysis completed!', 'success');
+                        } else {
+                            this.showAlert('Combined analysis failed', 'error');
+                        }
+                    } catch (error) {
+                        this.showAlert(error.response?.data?.error || 'Combined analysis failed', 'error');
+                    } finally {
+                        this.analyzing = false;
+                    }
+                },
+                
+                getTrendClass(trend) {
+                    if (trend === 'UPTREND') return 'text-success font-weight-bold';
+                    if (trend === 'DOWNTREND') return 'text-danger font-weight-bold';
+                    return 'text-warning font-weight-bold';
                 },
                 
                 async startTrading() {

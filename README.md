@@ -1,274 +1,313 @@
-# Trading Bot - Multi-Market Uptrend Detection
+# Advanced Trading Bot with Smart Money Concepts & XM Integration
 
-A Python-based trading bot that identifies uptrends in **stocks**, **cryptocurrencies**, **forex**, and **commodities** using the **Higher Highs (HH) and Higher Lows (HL)** methodology on various timeframes.
+A comprehensive automated trading bot featuring Smart Money Concepts (SMC), modern Vue.js frontend, MetaTrader 5 integration, and advanced machine learning capabilities for professional forex trading.
 
-## 🎯 Overview
+## 🚀 Features
 
-This trading bot implements the classic technical analysis approach for identifying uptrends across multiple markets:
+### Core Trading Features
+- **Smart Money Concepts (SMC)**: Order blocks, Fair Value Gaps, BOS/ChoCH detection
+- **Advanced Trend Analysis**: Higher Highs/Lows and Lower Highs/Lows detection
+- **Dual-Direction Trading**: Both uptrend (BUY) and downtrend (SELL) signal generation
+- **Dynamic Symbol Selection**: Trade 27+ forex pairs available on XM
+- **Multiple Timeframes**: 1m, 5m, 15m, 30m, 1h, 4h, 1d timeframes
+- **XM Account Integration**: Direct connection to XM demo and live accounts
+- **Machine Learning Analysis**: AI-powered signal generation and prediction
 
-- **Uptrend Definition**: Market moves in higher highs and higher lows
-- **Confirmation**: Requires at least 2 HH and 2 HL patterns to confirm uptrend
-- **Analysis Method**: Uses trendlines connecting pivot points on various timeframes
-- **Multi-Market Support**: Stocks, Cryptocurrencies, Forex, Commodities
-- **Visualization**: Interactive charts with pivot points, trendlines, and pattern identification
+### Smart Money Concepts Implementation
+- **Order Blocks**: Institutional buy/sell zones detection
+- **Fair Value Gaps (FVG)**: Price gap analysis and fill detection
+- **Break of Structure (BOS)**: Trend continuation patterns
+- **Change of Character (ChoCH)**: Trend reversal patterns
+- **Liquidity Zones**: Support/resistance with stop-loss clustering
+- **Market Structure Analysis**: Trend phase and volatility assessment
 
-## ✨ Features
+### Frontend Features
+- **Modern Vue.js UI**: Beautiful, responsive interface
+- **Real-time Updates**: Live status updates every 5 seconds
+- **Configuration Persistence**: Auto-saves account credentials
+- **Position Management**: Individual and bulk position closing
+- **SMC Analysis Display**: Visual SMC results and confidence scoring
 
-- **Multi-Market Data**: Fetches live market data from Yahoo Finance
-- **Pivot Point Detection**: Automatically identifies swing highs and lows
-- **Pattern Recognition**: Detects Higher Highs (HH) and Higher Lows (HL) patterns
-- **Trendline Analysis**: Creates trendlines connecting pivot points
-- **Interactive Charts**: Beautiful Plotly-based visualizations
-- **Detailed Reports**: Comprehensive analysis reports with trading recommendations
-- **Multiple Timeframes**: Supports various analysis periods (1h, 1d, 1w, 1mo, 1y)
-- **Auto-Detection**: Automatically detects market type based on symbol
+### Risk Management
+- **Dynamic Position Sizing**: Based on account balance and risk percentage
+- **SMC-Enhanced Stop Losses**: Using liquidity zones instead of fixed pips
+- **Intelligent Target Placement**: At resistance/support levels
+- **Confidence-Based Trading**: Signal strength filtering
+- **Account Protection**: Maximum risk per trade limits
 
-## 📋 Requirements
+## 📋 Prerequisites
 
-- Python 3.7+
-- Internet connection for data fetching
-- Required packages (see `requirements.txt`)
+### Required Software
+- **Python 3.8+**: For the backend trading bot
+- **MetaTrader 5**: Must be installed and running
+- **XM Trading Account**: Demo or live account
+- **Web Browser**: For the Vue.js frontend
 
-## 🚀 Installation
-
-1. **Clone or download the project files**
-
-2. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Verify installation**:
-   ```bash
-   python main.py AAPL 1y stock
-   ```
-
-## 📊 Usage
-
-### Basic Usage
-
-Analyze different markets:
+### Python Dependencies
 ```bash
-python main.py AAPL 1y stock      # Stock analysis
-python main.py BTC 1h crypto      # Cryptocurrency analysis
-python main.py EURUSD 1d forex    # Forex analysis
-python main.py GOLD 1w commodities # Commodity analysis
+pip install -r requirements.txt
 ```
 
-### Command Line Options
+### MetaTrader 5 Setup
+1. Install MetaTrader 5 from XM
+2. Enable AutoTrading:
+   - Tools → Options → Expert Advisors
+   - Check "Allow automated trading"
+   - Check "Allow DLL imports"
+   - Check "Allow WebRequest for listed URL"
+3. Restart MetaTrader 5
+4. Ensure the "AutoTrading" button is green (enabled)
 
+## 🛠️ Quick Start
+
+### 1. Installation
 ```bash
-python main.py [SYMBOL] [PERIOD] [MARKET_TYPE]
+git clone <repository-url>
+cd trading_bot
+pip install -r requirements.txt
 ```
 
-**Parameters:**
-- `SYMBOL`: Market symbol (e.g., AAPL, BTC, EURUSD, GOLD)
-- `PERIOD`: Analysis period (1h, 1d, 1w, 1mo, 1y, 2y)
-- `MARKET_TYPE`: Market type (stock, crypto, forex, commodities)
-
-**Examples:**
+### 2. Start the Application
 ```bash
-python main.py AAPL 1y stock      # Analyze Apple stock for 1 year
-python main.py BTC 1h crypto      # Analyze Bitcoin for 1 hour
-python main.py ETH 1d crypto      # Analyze Ethereum for 1 day
-python main.py EURUSD 1w forex    # Analyze EUR/USD for 1 week
-python main.py GOLD 1mo commodities # Analyze Gold for 1 month
+python app.py
 ```
 
-### Available Symbols
+### 3. Access the Interface
+Open your browser and navigate to: `http://localhost:5000`
 
-View all available symbols:
-```bash
-python main.py --symbols
+### 4. Connect to XM Account
+1. Enter your XM account credentials in the web interface
+2. Select Demo or Live server
+3. Click "Connect to MT5"
+4. Credentials are automatically saved for future use
+
+### 5. Run SMC Analysis
+1. Select trading symbol and timeframe
+2. Click "Analyze Market" for SMC-enhanced analysis
+3. Review comprehensive analysis results
+4. Execute trades based on SMC signals
+
+## 🧠 Smart Money Concepts Analysis
+
+### Order Blocks Detection
+```
+📦 Found 3 significant Order Blocks
+   - Bullish Order Block: Strong green candle after consolidation
+   - Bearish Order Block: Strong red candle indicating institutional selling
+   - Strength scoring based on volume expansion
 ```
 
-### Multiple Market Analysis
-
-Run analysis on multiple markets:
-```bash
-python main.py --examples
+### Fair Value Gaps Analysis
+```
+📊 Found 2 unfilled Fair Value Gaps
+   - Bullish FVG: Price gap requiring upward fill
+   - Bearish FVG: Price gap requiring downward fill
+   - Fill tracking and invalidation detection
 ```
 
-This will analyze: AAPL (stock), BTC (crypto), ETH (crypto), EURUSD (forex), GOLD (commodities)
-
-### Programmatic Usage
-
-```python
-from trading_bot import TradingBot
-
-# Stock analysis
-bot = TradingBot("AAPL", "1y", "stock")
-trend_analysis = bot.analyze_uptrend()
-
-# Crypto analysis
-bot = TradingBot("BTC", "1h", "crypto")
-trend_analysis = bot.analyze_uptrend()
-
-# Forex analysis
-bot = TradingBot("EURUSD", "1d", "forex")
-trend_analysis = bot.analyze_uptrend()
-
-# Generate report and chart
-bot.generate_report(trend_analysis)
-bot.plot_analysis(trend_analysis)
+### Market Structure Analysis
+```
+🔄 Found 1 recent BOS/ChoCH patterns
+   - BOS (Break of Structure): Trend continuation
+   - ChoCH (Change of Character): Trend reversal
+   - Swing point identification and strength scoring
 ```
 
-## 📈 How It Works
+### Liquidity Zones
+```
+💧 Found 5 liquidity zones
+   - Support zones: Areas with clustered buy-side liquidity
+   - Resistance zones: Areas with clustered sell-side liquidity
+   - Multiple touch confirmation
+```
 
-### 1. Data Collection
-- Fetches historical OHLCV data from Yahoo Finance
-- Supports various time periods and intervals
-- Auto-detects market type based on symbol
+## 📊 Analysis Output
 
-### 2. Pivot Point Detection
-- Identifies swing highs and lows using a sliding window approach
-- Configurable window size for pivot detection sensitivity
-
-### 3. Pattern Recognition
-- **Higher Highs (HH)**: Each new high is higher than the previous high
-- **Higher Lows (HL)**: Each new low is higher than the previous low
-- Requires minimum 2 HH and 2 HL points for uptrend confirmation
-
-### 4. Trendline Creation
-- Connects pivot points to create trendlines
-- HH trendline: Connects higher highs
-- HL trendline: Connects higher lows
-
-### 5. Analysis Output
-- **Console Report**: Detailed text analysis
-- **Interactive Chart**: Visual representation with all elements
-- **Trading Signals**: Buy/sell recommendations based on trend status
-
-## 📊 Output Examples
-
-### Console Output
+### Console Output Example
 ```
 ============================================================
-TRADING BOT ANALYSIS REPORT - BTC (CRYPTO)
+🔍 STARTING MARKET ANALYSIS
 ============================================================
-Analysis Period: 2024-01-01 to 2024-01-15
-Total Data Points: 360
-Pivot Points Found: 28
-
-UPTREND ANALYSIS:
-  Higher Highs (HH): 4
-  Higher Lows (HL): 3
-  Uptrend Confirmed: ✅ YES
-
-✅ TRADING SIGNAL: UPTREND DETECTED
-   The crypto market is showing a confirmed uptrend with:
-   - At least 2 higher highs (HH)
-   - At least 2 higher lows (HL)
-   - Trendlines connecting pivot points
-
-   HH Trendline: 2024-01-10 (45,200) → 2024-01-15 (46,800)
-   HL Trendline: 2024-01-08 (44,100) → 2024-01-12 (44,900)
+📊 Request: EURUSD 1h
+📈 Uptrend analysis: ✅ Found
+📉 Downtrend analysis: ❌ None
+📈 Using uptrend (strength: 75.2)
+🧠 Running Smart Money Concepts analysis...
+📦 Found 3 significant Order Blocks
+📊 Found 2 unfilled Fair Value Gaps
+🔄 Found 1 recent BOS/ChoCH patterns
+💧 Found 5 liquidity zones
+✅ SMC Analysis complete - Score: 68/100, Bias: BULLISH
+🎯 Generating SMC-enhanced trading signals...
+📈 SMC BUY Signal - Traditional: 75.2, SMC: 68.2, Confidence: 85
+✅ SMC-enhanced trading signals generated
+============================================================
+🎉 ANALYSIS COMPLETED SUCCESSFULLY
 ============================================================
 ```
 
-### Interactive Chart Features
-- **Candlestick Chart**: Price action visualization
-- **Pivot Points**: Red triangles (highs), green triangles (lows)
-- **Higher Highs/Lows**: Diamond markers with connecting lines
-- **Trendlines**: Dashed lines connecting pivot points
-- **Legend**: Interactive legend for all chart elements
+### API Response Format
+```json
+{
+  "success": true,
+  "symbol": "EURUSD",
+  "timeframe": "1h",
+  "analysis": {
+    "trend_direction": "UPTREND",
+    "smc_bias": "BULLISH",
+    "smc_score": 68.2,
+    "overall_strength": 75.2
+  },
+  "signals": {
+    "signal_type": "BUY",
+    "entry_price": 1.1585,
+    "stop_loss": 1.1560,     // SMC-based (support zone)
+    "target": 1.1635,        // SMC-based (resistance zone)
+    "signal_confidence": 85,
+    "smc_context": {
+      "order_blocks": 3,
+      "fair_value_gaps": 2,
+      "structure_breaks": 1
+    }
+  },
+  "smc": {
+    "smc_score": 68.2,
+    "current_bias": "BULLISH",
+    "order_blocks": 3,
+    "fair_value_gaps": 2,
+    "bos_choch_patterns": 1,
+    "liquidity_zones": 5,
+    "market_phase": "expansion"
+  }
+}
+```
 
 ## 🎯 Trading Strategy
 
-### Uptrend Confirmed (✅)
-- **Action**: Consider LONG positions
-- **Entry**: Look for pullbacks to trendline support
-- **Stop Loss**: Below recent higher low
-- **Target**: Next resistance level
+### SMC-Enhanced Signals
+- **Traditional Trend Analysis** + **Smart Money Concepts** = **High-Probability Setups**
+- **Confluence Trading**: Multiple confirmations required
+- **Institutional Levels**: Stop losses and targets at real liquidity zones
+- **Confidence Scoring**: 0-100 score helps filter weak signals
 
-### No Uptrend (❌)
-- **Action**: Avoid long positions
-- **Strategy**: Wait for uptrend confirmation
-- **Monitoring**: Watch for trend reversal signals
+### Signal Types
+#### Bullish Signals (BUY)
+- Uptrend confirmed + Bullish SMC bias
+- Entry at bullish order blocks or FVG fills
+- Stop loss below support zones
+- Target at resistance zones
+
+#### Bearish Signals (SELL)
+- Downtrend confirmed + Bearish SMC bias  
+- Entry at bearish order blocks or FVG fills
+- Stop loss above resistance zones
+- Target at support zones
 
 ## 🔧 Configuration
 
-### Pivot Detection Sensitivity
-```python
-bot.find_pivot_points(window=5)  # Adjust window size (3-10 recommended)
-```
+### Available Symbols (27+ Forex Pairs)
+- **Major Pairs**: EURUSD, GBPUSD, USDJPY, USDCHF, AUDUSD, USDCAD, NZDUSD
+- **Cross Pairs**: EURGBP, EURJPY, GBPJPY, CHFJPY, AUDCAD, AUDCHF, AUDJPY
+- **Exotic Pairs**: AUDNZD, CADCHF, CADJPY, EURAUD, EURCAD, EURCHF, EURNZD
 
-### Uptrend Confirmation Threshold
-```python
-trend_analysis = bot.identify_higher_highs_lows(min_points=2)  # Minimum HH/HL points
-```
-
-### Market Type Detection
-```python
-# Auto-detection
-bot = TradingBot("BTC", "1h")  # Automatically detects as crypto
-
-# Manual specification
-bot = TradingBot("BTC", "1h", "crypto")  # Explicitly specify market type
+### Configuration Persistence
+All settings are automatically saved to `.env` file:
+```env
+XM_ACCOUNT_NUMBER=your_account_number
+XM_PASSWORD=your_password
+XM_SERVER=XMGlobal-Demo
+DEFAULT_SYMBOL=EURUSD
+DEFAULT_TIMEFRAME=1h
+RISK_PER_TRADE=2.0
+AUTO_TRADE=false
+USE_ML=true
 ```
 
 ## 📁 Project Structure
 
 ```
-Bot/
-├── trading_bot.py      # Main trading bot class
-├── main.py            # Command-line interface
-├── example.py         # Usage examples
-├── simple_trading_bot.py # Demo version
-├── setup.py           # Installation helper
-├── requirements.txt   # Python dependencies
-└── README.md         # This file
+trading_bot/
+├── app.py                      # Main Flask application with SMC
+├── mt5_trading_bot.py         # MT5-specific trading bot
+├── mt5_connector.py           # MetaTrader 5 connection handler
+├── trading_bot.py             # Core trading analysis engine
+├── templates/
+│   └── index.html             # Vue.js frontend interface
+├── requirements.txt           # Python dependencies
+├── .env                       # Configuration (auto-generated)
+├── .gitignore                # Git ignore patterns
+└── README.md                 # This documentation
 ```
 
-## 🛠️ Customization
+## 🚨 Risk Disclaimer
 
-### Adding New Market Types
-```python
-def add_custom_market(self):
-    # Add your custom market types here
-    pass
+- **Trading involves substantial risk of loss**
+- **Past performance does not guarantee future results**
+- **Smart Money Concepts are educational tools, not guarantees**
+- **Always test with demo accounts first**
+- **Never risk more than you can afford to lose**
+- **This is not financial advice**
+
+## 🔒 Security Features
+
+### Account Security
+- **Environment Variables**: Secure credential storage
+- **Auto-save Credentials**: Persistent configuration
+- **Connection Validation**: MT5 connection verification
+- **Graceful Error Handling**: Safe failure management
+
+### Trading Safety
+- **Demo Account Support**: Risk-free testing
+- **Confidence-Based Filtering**: Only high-probability signals
+- **Dynamic Risk Management**: Adaptive position sizing
+- **Emergency Stop**: Immediate trading halt capability
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+#### Analysis Errors
 ```
-
-### Modifying Analysis Logic
-```python
-def custom_uptrend_logic(self):
-    # Implement your custom uptrend detection logic
-    pass
+Error: Response formatting error
 ```
+**Solution**: Enhanced error handling now provides detailed console output for debugging
 
-## ⚠️ Disclaimer
+#### Connection Problems
+```
+Error: Failed to connect to MT5
+```
+**Solutions:**
+- Verify XM credentials are correct
+- Ensure MetaTrader 5 is running
+- Check AutoTrading is enabled in MT5
+- Verify internet connection
 
-This trading bot is for **educational and research purposes only**. 
+#### SMC Analysis Issues
+```
+Warning: SMC Analysis failed, using traditional analysis only
+```
+**Solutions:**
+- Ensure sufficient historical data (minimum 100 bars)
+- Try different timeframes
+- Check symbol availability
 
-- **Not Financial Advice**: The analysis and recommendations are not financial advice
-- **Risk Warning**: Trading involves substantial risk of loss
-- **Backtesting**: Past performance does not guarantee future results
-- **Due Diligence**: Always conduct your own research before making trading decisions
-- **Market Volatility**: Cryptocurrency and forex markets are highly volatile
+## 🔄 Version History
+
+- **v3.0**: Smart Money Concepts integration, dual-direction trading
+- **v2.5**: Configuration persistence, enhanced error handling  
+- **v2.0**: Vue.js frontend, dynamic symbol selection
+- **v1.5**: Machine learning capabilities, risk management
+- **v1.0**: Basic MT5 integration
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit pull requests or open issues for:
-
-- Bug fixes
-- New features
-- Documentation improvements
-- Performance optimizations
-- Additional market types
-
-## 📄 License
-
-This project is open source and available under the MIT License.
-
-## 🆘 Support
-
-If you encounter any issues or have questions:
-
-1. Check the console output for error messages
-2. Verify your internet connection for data fetching
-3. Ensure all dependencies are installed correctly
-4. Open an issue with detailed error information
+Contributions welcome! Areas for improvement:
+- Additional SMC patterns
+- Advanced ML models
+- Backtesting capabilities
+- Mobile interface
+- Multi-timeframe analysis
 
 ---
 
-**Happy Trading! 📈** 
+**Trade Like the Institutions with Smart Money Concepts! 🧠📈**

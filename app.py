@@ -35,14 +35,15 @@ bot_instance = None
 bot_thread = None
 bot_running = False
 bot_config = {
-    'account_number': None,
-    'password': None,
-    'server': None,
-    'symbol': None,
-    'timeframe': None,
-    'risk_per_trade': 0.02,
-    'auto_trade': False,
-    'use_ml': True
+    'account_number': os.getenv('XM_ACCOUNT_NUMBER'),
+    'password': os.getenv('XM_PASSWORD'),
+    'server': os.getenv('XM_SERVER', 'XMGlobal-Demo'),
+    'symbol': 'EURUSD',
+    'timeframe': '5m',
+    'risk_per_trade': float(os.getenv('RISK_PER_TRADE', 0.02)),
+    'account_size': float(os.getenv('ACCOUNT_SIZE', 10000)),
+    'auto_trade': os.getenv('AUTO_TRADE', 'false').lower() == 'true',
+    'use_ml': os.getenv('USE_ML', 'true').lower() == 'true'
 }
 
 # Available symbols and timeframes
@@ -107,6 +108,26 @@ def update_config():
     
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
+
+@app.route('/api/env-config', methods=['GET'])
+def get_env_config():
+    """Get configuration from environment variables"""
+    env_config = {
+        'account_number': os.getenv('XM_ACCOUNT_NUMBER', ''),
+        'password': os.getenv('XM_PASSWORD', ''),
+        'server': os.getenv('XM_SERVER', 'XMGlobal-Demo'),
+        'symbol': 'EURUSD',
+        'timeframe': '5m',
+        'risk_per_trade': float(os.getenv('RISK_PER_TRADE', 0.02)),
+        'account_size': float(os.getenv('ACCOUNT_SIZE', 10000)),
+        'auto_trade': os.getenv('AUTO_TRADE', 'false').lower() == 'true',
+        'use_ml': os.getenv('USE_ML', 'true').lower() == 'true'
+    }
+    return jsonify({
+        'config': env_config,
+        'available_symbols': AVAILABLE_SYMBOLS,
+        'available_timeframes': AVAILABLE_TIMEFRAMES
+    })
 
 @app.route('/api/connect', methods=['POST'])
 def connect_mt5():
@@ -198,24 +219,99 @@ def analyze_market():
         
         # Run analysis
         analysis = bot_instance.run_analysis_cycle()
-        
+        print(f"Analysis result: {type(analysis)}")
         if analysis:
-            # Get ML prediction if available
-            ml_prediction = None
-            if bot_instance.use_ml and bot_instance.model_trained and bot_instance.analysis_bot and bot_instance.analysis_bot.data is not None:
-                ml_prediction = bot_instance.get_ml_prediction(bot_instance.analysis_bot.data)
-            
-            # Get trading signals
-            signals = bot_instance.get_trading_signals(analysis)
-            
-            return jsonify({
-                'success': True,
-                'analysis': analysis,
-                'ml_prediction': ml_prediction,
-                'signals': signals,
-                'symbol': symbol,
-                'timeframe': timeframe
-            })
+            print(f"Analysis keys: {list(analysis.keys())}")
+            try:
+                # Get ML prediction if available
+                ml_prediction = None
+                if bot_instance.use_ml and bot_instance.model_trained and bot_instance.analysis_bot and bot_instance.analysis_bot.data is not None:
+                    ml_prediction = bot_instance.get_ml_prediction(bot_instance.analysis_bot.data)
+                
+                # Get trading signals
+                signals = bot_instance.get_trading_signals(analysis)
+                
+                # Ensure analysis data is JSON serializable and has expected keys
+                serializable_analysis = {}
+                for key, value in analysis.items():
+                    if isinstance(value, (int, float, str, bool, list, dict)):
+                        serializable_analysis[key] = value
+                    else:
+                        serializable_analysis[key] = str(value)
+                
+                # Ensure all expected keys are present for frontend compatibility
+                expected_keys = {
+                    'entry_conditions': [],
+                    'uptrend_confirmed': False,
+                    'downtrend_confirmed': False,
+                    'trend_direction': 'SIDEWAYS',
+                    'trend_strength': 0,
+                    'overall_strength': 0,
+                    'primary_timeframe': timeframe,
+                    'primary_analysis': {
+                        'hh_count': 0,
+                        'hl_count': 0,
+                        'lh_count': 0,
+                        'll_count': 0,
+                        'higher_highs': [],
+                        'higher_lows': [],
+                        'lower_highs': [],
+                        'lower_lows': [],
+                        'uptrend_confirmed': False,
+                        'downtrend_confirmed': False
+                    },
+                    'uptrend_analysis': {
+                        'hh_count': 0,
+                        'hl_count': 0,
+                        'uptrend_confirmed': False
+                    },
+                    'downtrend_analysis': {
+                        'lh_count': 0,
+                        'll_count': 0,
+                        'downtrend_confirmed': False
+                    },
+                    'h4_analysis': {
+                        'hh_count': 0,
+                        'hl_count': 0,
+                        'uptrend_confirmed': False
+                    },
+                    'strong_trendlines': [],
+                    'breakout_signals': None,
+                    'continuation_patterns': None,
+                    'timeframe': timeframe,
+                    'trading_rules_followed': {
+                        'multi_timeframe_confirmed': False,
+                        'min_hh_hl_met': False,
+                        'strong_trendlines': False,
+                        'breakout_retest_ready': False,
+                        'continuation_patterns_ready': False
+                    }
+                }
+                
+                def merge_defaults(target, defaults):
+                    """Recursively merge default values into target dict"""
+                    for key, default_value in defaults.items():
+                        if key not in target:
+                            target[key] = default_value
+                        elif isinstance(default_value, dict) and isinstance(target.get(key), dict):
+                            merge_defaults(target[key], default_value)
+                
+                merge_defaults(serializable_analysis, expected_keys)
+                
+                return jsonify({
+                    'success': True,
+                    'analysis': serializable_analysis,
+                    'ml_prediction': ml_prediction,
+                    'signals': signals,
+                    'symbol': symbol,
+                    'timeframe': timeframe
+                })
+            except Exception as e:
+                print(f"Error serializing analysis response: {e}")
+                print(f"Analysis keys: {list(analysis.keys()) if analysis else 'None'}")
+                import traceback
+                traceback.print_exc()
+                return jsonify({'success': False, 'error': f'Error serializing analysis: {str(e)}'}), 500
         else:
             return jsonify({'success': False, 'error': 'Analysis failed'}), 400
     
@@ -373,6 +469,213 @@ def close_symbol_positions(symbol):
     
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/smc_analysis/<symbol>/<timeframe>')
+def get_smc_analysis(symbol, timeframe):
+    """Get Smart Money Concept analysis for a symbol and timeframe"""
+    try:
+        # Create trading bot instance
+        bot = MT5TradingBot(symbol, timeframe, use_smc=True, use_ml=True)
+        
+        # Get market data
+        data = bot.get_market_data()
+        if data is None or len(data) < 100:
+            # If MT5 data is not available, create sample data for demo
+            print(f"⚠️ MT5 data not available for {symbol}, using sample data for demo")
+            import pandas as pd
+            import numpy as np
+            
+            # Create sample data
+            dates = pd.date_range(start='2024-01-01', end='2024-01-31', freq='5min')
+            np.random.seed(42)
+            
+            base_price = 1.1000
+            price_changes = np.random.normal(0, 0.0005, len(dates))
+            prices = [base_price]
+            
+            for change in price_changes[1:]:
+                new_price = prices[-1] + change
+                prices.append(max(0.9, min(1.3, new_price)))
+            
+            data = pd.DataFrame({
+                'Open': prices,
+                'High': [p + abs(np.random.normal(0, 0.0002)) for p in prices],
+                'Low': [p - abs(np.random.normal(0, 0.0002)) for p in prices],
+                'Close': prices,
+                'Volume': np.random.randint(1000, 10000, len(dates))
+            }, index=dates)
+            
+            data['High'] = data[['Open', 'High', 'Close']].max(axis=1)
+            data['Low'] = data[['Open', 'Low', 'Close']].min(axis=1)
+        
+        # Perform SMC analysis
+        smc_results = bot.analyze_smc(data)
+        if not smc_results:
+            return jsonify({'error': 'SMC analysis failed'}), 500
+        
+        # Format response
+        response = {
+            'symbol': symbol,
+            'timeframe': timeframe,
+            'timestamp': datetime.now().isoformat(),
+            'current_price': smc_results['current_price'],
+            'market_structure': smc_results['summary']['market_structure'],
+            'order_blocks': {
+                'total': smc_results['summary']['order_blocks']['total_count'],
+                'bullish': smc_results['summary']['order_blocks']['bullish_count'],
+                'bearish': smc_results['summary']['order_blocks']['bearish_count'],
+                'mitigated': smc_results['summary']['order_blocks']['mitigated_count'],
+                'average_strength': round(smc_results['summary']['order_blocks']['average_strength'], 2)
+            },
+            'fair_value_gaps': {
+                'total': smc_results['summary']['fair_value_gaps']['total_count'],
+                'bullish': smc_results['summary']['fair_value_gaps']['bullish_count'],
+                'bearish': smc_results['summary']['fair_value_gaps']['bearish_count'],
+                'mitigated': smc_results['summary']['fair_value_gaps']['mitigated_count'],
+                'average_gap_size': round(smc_results['summary']['fair_value_gaps']['average_gap_size'], 5)
+            },
+            'liquidity_zones': {
+                'total': smc_results['summary']['liquidity_zones']['total_count'],
+                'equal_highs': smc_results['summary']['liquidity_zones']['equal_highs_count'],
+                'equal_lows': smc_results['summary']['liquidity_zones']['equal_lows_count'],
+                'average_strength': round(smc_results['summary']['liquidity_zones']['average_strength'], 2)
+            },
+            'institutional_order_blocks': {
+                'total': smc_results['summary']['institutional_order_blocks']['total_count'],
+                'bullish': smc_results['summary']['institutional_order_blocks']['bullish_count'],
+                'bearish': smc_results['summary']['institutional_order_blocks']['bearish_count'],
+                'average_volume_ratio': round(smc_results['summary']['institutional_order_blocks']['average_volume_ratio'], 2)
+            },
+            'signals': {
+                'order_block_signals': len(smc_results['signals'].get('order_block_signals', [])),
+                'fvg_signals': len(smc_results['signals'].get('fvg_signals', [])),
+                'liquidity_signals': len(smc_results['signals'].get('liquidity_signals', [])),
+                'market_structure_signals': len(smc_results['signals'].get('market_structure_signals', [])),
+                'premium_discount_signals': len(smc_results['signals'].get('premium_discount_signals', [])),
+                'institutional_signals': len(smc_results['signals'].get('institutional_signals', []))
+            }
+        }
+        
+        return jsonify(response)
+        
+    except Exception as e:
+        return jsonify({'error': f'SMC analysis error: {str(e)}'}), 500
+
+@app.route('/api/smc_signals/<symbol>/<timeframe>')
+def get_smc_trading_signals(symbol, timeframe):
+    """Get Smart Money Concept trading signals for a symbol and timeframe"""
+    try:
+        # Create trading bot instance
+        bot = MT5TradingBot(symbol, timeframe, use_smc=True, use_ml=True)
+        
+        # Get market data
+        data = bot.get_market_data()
+        if data is None or len(data) < 100:
+            # If MT5 data is not available, create sample data for demo
+            print(f"⚠️ MT5 data not available for {symbol}, using sample data for demo")
+            import pandas as pd
+            import numpy as np
+            
+            # Create sample data
+            dates = pd.date_range(start='2024-01-01', end='2024-01-31', freq='5min')
+            np.random.seed(42)
+            
+            base_price = 1.1000
+            price_changes = np.random.normal(0, 0.0005, len(dates))
+            prices = [base_price]
+            
+            for change in price_changes[1:]:
+                new_price = prices[-1] + change
+                prices.append(max(0.9, min(1.3, new_price)))
+            
+            data = pd.DataFrame({
+                'Open': prices,
+                'High': [p + abs(np.random.normal(0, 0.0002)) for p in prices],
+                'Low': [p - abs(np.random.normal(0, 0.0002)) for p in prices],
+                'Close': prices,
+                'Volume': np.random.randint(1000, 10000, len(dates))
+            }, index=dates)
+            
+            data['High'] = data[['Open', 'High', 'Close']].max(axis=1)
+            data['Low'] = data[['Open', 'Low', 'Close']].min(axis=1)
+        
+        # Perform SMC analysis
+        smc_results = bot.analyze_smc(data)
+        if not smc_results:
+            return jsonify({'error': 'SMC analysis failed'}), 500
+        
+        # Get current price
+        current_price = data['Close'].iloc[-1]
+        
+        # Get SMC trading signals
+        smc_signals = bot.get_smc_trading_signals(current_price)
+        
+        # Format signals for response
+        formatted_signals = []
+        if smc_signals:
+            for signal in smc_signals:
+                formatted_signals.append({
+                    'type': signal['type'],
+                    'entry_price': round(signal['entry_price'], 5),
+                    'stop_loss': round(signal['stop_loss'], 5),
+                    'target': round(signal['target'], 5),
+                    'source': signal['source'],
+                    'strength': round(signal['strength'], 3),
+                    'timestamp': signal['timestamp'].isoformat() if hasattr(signal['timestamp'], 'isoformat') else str(signal['timestamp'])
+                })
+        
+        response = {
+            'symbol': symbol,
+            'timeframe': timeframe,
+            'current_price': round(current_price, 5),
+            'timestamp': datetime.now().isoformat(),
+            'signals_count': len(formatted_signals),
+            'signals': formatted_signals
+        }
+        
+        return jsonify(response)
+        
+    except Exception as e:
+        return jsonify({'error': f'SMC signals error: {str(e)}'}), 500
+
+@app.route('/api/combined_analysis/<symbol>/<timeframe>')
+def get_combined_analysis(symbol, timeframe):
+    """Get combined analysis including traditional TA, SMC, and ML"""
+    try:
+        # Create trading bot instance
+        bot = MT5TradingBot(symbol, timeframe, use_smc=True, use_ml=True)
+        
+        # Perform comprehensive analysis
+        combined_signal = bot.analyze_market()
+        
+        if not combined_signal:
+            return jsonify({'error': 'No trading signals generated'}), 404
+        
+        # Format response
+        response = {
+            'symbol': symbol,
+            'timeframe': timeframe,
+            'timestamp': datetime.now().isoformat(),
+            'signal_type': combined_signal['signal_type'],
+            'signal_strength': round(combined_signal['signal_strength'], 3),
+            'signal_sources': combined_signal['signal_sources'],
+            'entry_price': round(combined_signal['entry_price'], 5) if combined_signal['entry_price'] else None,
+            'stop_loss': round(combined_signal['stop_loss'], 5) if combined_signal['stop_loss'] else None,
+            'target': round(combined_signal['target'], 5) if combined_signal['target'] else None,
+            'position_size': round(combined_signal['position_size'], 2) if combined_signal['position_size'] else None,
+            'potential_profit': round(combined_signal['potential_profit'], 2) if combined_signal['potential_profit'] else None,
+            'risk_amount': round(combined_signal['risk_amount'], 2) if combined_signal['risk_amount'] else None,
+            'analysis': {
+                'traditional_ta': combined_signal.get('analysis', {}),
+                'ml_prediction': combined_signal.get('ml_prediction', {}),
+                'smc_signals': combined_signal.get('smc_signals', {})
+            }
+        }
+        
+        return jsonify(response)
+        
+    except Exception as e:
+        return jsonify({'error': f'Combined analysis error: {str(e)}'}), 500
 
 def run_trading_loop():
     """Run the trading loop in a separate thread"""

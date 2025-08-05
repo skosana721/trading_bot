@@ -741,8 +741,20 @@ class TradingBot:
         if price_risk == 0:
             return None
         
-        # Calculate position size
-        position_size = risk_amount / price_risk
+        # Calculate position size for forex trading
+        # For forex, we need to calculate position size in lots
+        pip_size = 0.0001 if 'JPY' not in self.symbol else 0.01
+        stop_loss_pips = price_risk / pip_size
+        
+        if stop_loss_pips > 0:
+            # Position size in lots (1 lot = 100,000 units for major pairs)
+            # $10 per pip per lot for EURUSD, GBPUSD, etc.
+            position_size = risk_amount / (stop_loss_pips * 10)
+            # Cap position size to reasonable limits
+            position_size = min(position_size, 10.0)  # Max 10 lots
+            position_size = max(position_size, 0.01)  # Min 0.01 lots
+        else:
+            position_size = 0.01  # Default minimum
         
         # Calculate target price based on 1:3 risk-to-reward ratio
         price_reward = price_risk * self.risk_reward_ratio
@@ -775,26 +787,50 @@ class TradingBot:
         Returns:
             dict: Day trading signals with position sizing
         """
-        if not trend_analysis or not trend_analysis['uptrend_confirmed']:
+        if not trend_analysis or (not trend_analysis.get('uptrend_confirmed', False) and not trend_analysis.get('downtrend_confirmed', False)):
             return None
         
         # Get current price (last close price)
         current_price = self.data['Close'].iloc[-1]
         
-        # Find recent higher low for stop loss
-        recent_hl = None
-        if trend_analysis['higher_lows']:
-            recent_hl = trend_analysis['higher_lows'][-1]['price']
+        # Determine signal type and calculate levels based on trend direction
+        is_uptrend = trend_analysis.get('uptrend_confirmed', False)
+        is_downtrend = trend_analysis.get('downtrend_confirmed', False)
         
-        # Find recent higher high for target
-        recent_hh = None
-        if trend_analysis['higher_highs']:
-            recent_hh = trend_analysis['higher_highs'][-1]['price']
-        
-        # Calculate entry, stop loss, and target
         entry_price = current_price
-        stop_loss_price = recent_hl if recent_hl else current_price * 0.98  # 2% below current if no HL
-        target_price = recent_hh if recent_hh else current_price * 1.06  # 6% above current if no HH
+        
+        if is_uptrend:
+            # Find recent higher low for stop loss
+            recent_hl = None
+            if trend_analysis.get('higher_lows'):
+                recent_hl = trend_analysis['higher_lows'][-1]['price']
+            
+            # Find recent higher high for target
+            recent_hh = None
+            if trend_analysis.get('higher_highs'):
+                recent_hh = trend_analysis['higher_highs'][-1]['price']
+            
+            stop_loss_price = recent_hl if recent_hl else current_price * 0.98  # 2% below current if no HL
+            target_price = recent_hh if recent_hh else current_price * 1.06  # 6% above current if no HH
+            signal_type = "DAY_TRADING_LONG"
+            
+        elif is_downtrend:
+            # Find recent lower high for stop loss
+            recent_lh = None
+            if trend_analysis.get('lower_highs'):
+                recent_lh = trend_analysis['lower_highs'][-1]['price']
+            
+            # Find recent lower low for target
+            recent_ll = None
+            if trend_analysis.get('lower_lows'):
+                recent_ll = trend_analysis['lower_lows'][-1]['price']
+            
+            stop_loss_price = recent_lh if recent_lh else current_price * 1.02  # 2% above current if no LH
+            target_price = recent_ll if recent_ll else current_price * 0.94  # 6% below current if no LL
+            signal_type = "DAY_TRADING_SHORT"
+        
+        else:
+            return None
         
         # Calculate position sizing
         position_info = self.calculate_position_size(entry_price, stop_loss_price)
@@ -849,7 +885,7 @@ class TradingBot:
         }
         
         signals = {
-            'signal_type': 'DAY_TRADING_LONG',
+            'signal_type': signal_type,
             'entry_price': entry_price,
             'stop_loss_price': stop_loss_price,
             'target_price': target_price,
@@ -1082,6 +1118,59 @@ class TradingBot:
         
         return result
     
+    def identify_lower_highs_lows(self, min_points=2):
+        """
+        Identify lower highs (LH) and lower lows (LL) patterns for downtrend analysis
+        
+        Args:
+            min_points (int): Minimum number of LH/LL points to confirm downtrend
+        """
+        if self.pivot_points is None or len(self.pivot_points) == 0:
+            print("No pivot points available. Cannot analyze trends.")
+            return None
+        
+        if len(self.pivot_points) < 4:
+            print(f"Not enough pivot points to analyze trends. Need at least 4, got {len(self.pivot_points)}")
+            return None
+        
+        # Separate highs and lows
+        highs = self.pivot_points[self.pivot_points['type'] == 'high'].copy()
+        lows = self.pivot_points[self.pivot_points['type'] == 'low'].copy()
+        
+        # Find lower highs
+        lower_highs = []
+        for i in range(1, len(highs)):
+            if highs['price'].iloc[i] < highs['price'].iloc[i-1]:
+                lower_highs.append({
+                    'date': highs['date'].iloc[i],
+                    'price': highs['price'].iloc[i],
+                    'type': 'LH'
+                })
+        
+        # Find lower lows
+        lower_lows = []
+        for i in range(1, len(lows)):
+            if lows['price'].iloc[i] < lows['price'].iloc[i-1]:
+                lower_lows.append({
+                    'date': lows['date'].iloc[i],
+                    'price': lows['price'].iloc[i],
+                    'type': 'LL'
+                })
+        
+        # Check if we have enough LH and LL points to confirm downtrend
+        downtrend_confirmed = len(lower_highs) >= min_points and len(lower_lows) >= min_points
+        
+        result = {
+            'lower_highs': lower_highs,
+            'lower_lows': lower_lows,
+            'downtrend_confirmed': downtrend_confirmed,
+            'lh_count': len(lower_highs),
+            'll_count': len(lower_lows),
+            'timeframe': self.period
+        }
+        
+        return result
+    
     def create_trendlines(self, trend_analysis):
         """
         Create trendlines connecting pivot points
@@ -1177,18 +1266,18 @@ class TradingBot:
             primary_data = self.daily_data
             primary_analysis = self.identify_higher_highs_lows_advanced(self.daily_data, min_points=2)
             
-            if not primary_analysis or not primary_analysis['uptrend_confirmed']:
+            if not primary_analysis or not primary_analysis.get('uptrend_confirmed', False):
                 print("❌ Neither Weekly nor Daily timeframe confirms uptrend")
                 print(f"   Weekly HH: {self.identify_higher_highs_lows_advanced(self.weekly_data, min_points=2)['hh_count'] if self.weekly_data is not None else 0}")
                 print(f"   Weekly HL: {self.identify_higher_highs_lows_advanced(self.weekly_data, min_points=2)['hl_count'] if self.weekly_data is not None else 0}")
-                print(f"   Daily HH: {primary_analysis['hh_count'] if primary_analysis else 0}")
-                print(f"   Daily HL: {primary_analysis['hl_count'] if primary_analysis else 0}")
+                print(f"   Daily HH: {primary_analysis.get('hh_count', 0) if primary_analysis else 0}")
+                print(f"   Daily HL: {primary_analysis.get('hl_count', 0) if primary_analysis else 0}")
                 return None
         
         print(f"✅ {primary_timeframe} uptrend confirmed")
-        print(f"   Higher Highs: {primary_analysis['hh_count']}")
-        print(f"   Higher Lows: {primary_analysis['hl_count']}")
-        print(f"   Trend Strength: {primary_analysis['trend_strength']:.1f}/100")
+        print(f"   Higher Highs: {primary_analysis.get('hh_count', 0)}")
+        print(f"   Higher Lows: {primary_analysis.get('hl_count', 0)}")
+        print(f"   Trend Strength: {primary_analysis.get('trend_strength', 0):.1f}/100")
         
         # Step 3: H4 entry analysis (Entry timeframe)
         print("\n📈 STEP 3: H4 Entry Analysis")
@@ -1197,9 +1286,9 @@ class TradingBot:
             print("❌ Insufficient H4 data for analysis")
             return None
         
-        print(f"   H4 Higher Highs: {h4_analysis['hh_count']}")
-        print(f"   H4 Higher Lows: {h4_analysis['hl_count']}")
-        print(f"   H4 Trend Strength: {h4_analysis['trend_strength']:.1f}/100")
+        print(f"   H4 Higher Highs: {h4_analysis.get('hh_count', 0)}")
+        print(f"   H4 Higher Lows: {h4_analysis.get('hl_count', 0)}")
+        print(f"   H4 Trend Strength: {h4_analysis.get('trend_strength', 0):.1f}/100")
         
         # Step 4: Advanced trendline analysis with 3-4 touch validation
         print("\n📏 STEP 4: Advanced Trendline Analysis (3-4 Touch Validation)")
@@ -1273,14 +1362,14 @@ class TradingBot:
         print("\n📋 STEP 7: Final Analysis Summary")
         
         # Calculate overall trend strength
-        overall_strength = (primary_analysis['trend_strength'] + h4_analysis['trend_strength']) / 2
+        overall_strength = (primary_analysis.get('trend_strength', 0) + h4_analysis.get('trend_strength', 0)) / 2
         
         # Strict uptrend confirmation rules
         uptrend_confirmed = (
-            primary_analysis['uptrend_confirmed'] and  # Weekly/Daily confirms trend
-            primary_analysis['hh_count'] >= 2 and      # At least 2 HH
-            primary_analysis['hl_count'] >= 2 and      # At least 2 HL
-            h4_analysis['uptrend_confirmed'] and       # H4 confirms for entries
+            primary_analysis.get('uptrend_confirmed', False) and  # Weekly/Daily confirms trend
+            primary_analysis.get('hh_count', 0) >= 2 and      # At least 2 HH
+            primary_analysis.get('hl_count', 0) >= 2 and      # At least 2 HL
+            h4_analysis.get('uptrend_confirmed', False) and       # H4 confirms for entries
             overall_strength > 60                      # Strong trend strength
         )
         
@@ -1314,8 +1403,8 @@ class TradingBot:
             'entry_conditions': entry_conditions,
             'timeframe': self.period,
             'trading_rules_followed': {
-                'multi_timeframe_confirmed': primary_analysis['uptrend_confirmed'] and h4_analysis['uptrend_confirmed'],
-                'min_hh_hl_met': primary_analysis['hh_count'] >= 2 and primary_analysis['hl_count'] >= 2,
+                'multi_timeframe_confirmed': primary_analysis.get('uptrend_confirmed', False) and h4_analysis.get('uptrend_confirmed', False),
+                'min_hh_hl_met': primary_analysis.get('hh_count', 0) >= 2 and primary_analysis.get('hl_count', 0) >= 2,
                 'strong_trendlines': len(strong_trendlines) >= 2,
                 'breakout_retest_ready': breakout_signals and breakout_signals.get('retest_confirmed', False),
                 'continuation_patterns_ready': pattern_count > 0
@@ -1339,12 +1428,12 @@ class TradingBot:
             print(f"❌ Uptrend not strong enough for {self.symbol}")
             print(f"   Overall Strength: {overall_strength:.1f}/100")
             print(f"   Missing Requirements:")
-            if not primary_analysis['uptrend_confirmed']:
+            if not primary_analysis.get('uptrend_confirmed', False):
                 print(f"      ❌ {primary_timeframe} uptrend not confirmed")
-            if primary_analysis['hh_count'] < 2:
-                print(f"      ❌ Insufficient Higher Highs ({primary_analysis['hh_count']}/2)")
-            if primary_analysis['hl_count'] < 2:
-                print(f"      ❌ Insufficient Higher Lows ({primary_analysis['hl_count']}/2)")
+            if primary_analysis.get('hh_count', 0) < 2:
+                print(f"      ❌ Insufficient Higher Highs ({primary_analysis.get('hh_count', 0)}/2)")
+            if primary_analysis.get('hl_count', 0) < 2:
+                print(f"      ❌ Insufficient Higher Lows ({primary_analysis.get('hl_count', 0)}/2)")
             if overall_strength <= 60:
                 print(f"      ❌ Trend strength too weak ({overall_strength:.1f}/60)")
         
@@ -1385,6 +1474,151 @@ class TradingBot:
             print(f"❌ Cannot analyze trends for {self.symbol} ({self.market_type}) on {self.period} timeframe - insufficient data")
         
         return trend_analysis
+    
+    def analyze_downtrend(self):
+        """
+        Complete downtrend analysis including pivot points, LH/LL detection, and trendlines
+        """
+        if not self.fetch_data():
+            print(f"Failed to fetch data for {self.symbol}. Cannot perform analysis.")
+            return None
+        
+        # Check if we have enough data
+        if len(self.data) == 0:
+            print(f"No data available for {self.symbol}. Cannot perform analysis.")
+            return None
+        
+        if len(self.data) < 10:
+            print(f"Insufficient data for {self.symbol}. Need at least 10 data points, got {len(self.data)}")
+            return None
+        
+        self.find_pivot_points()
+        trend_analysis = self.identify_lower_highs_lows()
+        
+        if trend_analysis:
+            if trend_analysis['downtrend_confirmed']:
+                self.create_trendlines(trend_analysis)
+                print(f"✅ DOWNTREND CONFIRMED for {self.symbol} ({self.market_type}) on {self.period} timeframe")
+                print(f"   Lower Highs: {trend_analysis['lh_count']}")
+                print(f"   Lower Lows: {trend_analysis['ll_count']}")
+            else:
+                print(f"❌ No downtrend confirmed for {self.symbol} ({self.market_type}) on {self.period} timeframe")
+                print(f"   Lower Highs: {trend_analysis['lh_count']}")
+                print(f"   Lower Lows: {trend_analysis['ll_count']}")
+        else:
+            print(f"❌ Cannot analyze trends for {self.symbol} ({self.market_type}) on {self.period} timeframe - insufficient data")
+        
+        return trend_analysis
+    
+    def analyze_market_trend(self):
+        """
+        Analyze market for both uptrend and downtrend patterns
+        
+        Returns:
+            dict: Combined trend analysis results
+        """
+        if not self.fetch_data():
+            print(f"Failed to fetch data for {self.symbol}. Cannot perform analysis.")
+            return None
+        
+        # Check if we have enough data
+        if len(self.data) == 0:
+            print(f"No data available for {self.symbol}. Cannot perform analysis.")
+            return None
+        
+        if len(self.data) < 10:
+            print(f"Insufficient data for {self.symbol}. Need at least 10 data points, got {len(self.data)}")
+            return None
+        
+        self.find_pivot_points()
+        
+        # Analyze both uptrend and downtrend
+        uptrend_analysis = self.identify_higher_highs_lows()
+        downtrend_analysis = self.identify_lower_highs_lows()
+        
+        # Determine dominant trend
+        trend_direction = "SIDEWAYS"
+        trend_strength = 0
+        active_analysis = None
+        
+        if uptrend_analysis and uptrend_analysis.get('uptrend_confirmed', False):
+            uptrend_strength = uptrend_analysis.get('hh_count', 0) + uptrend_analysis.get('hl_count', 0)
+        else:
+            uptrend_strength = 0
+            
+        if downtrend_analysis and downtrend_analysis.get('downtrend_confirmed', False):
+            downtrend_strength = downtrend_analysis.get('lh_count', 0) + downtrend_analysis.get('ll_count', 0)
+        else:
+            downtrend_strength = 0
+        
+        if uptrend_strength > downtrend_strength and uptrend_strength >= 4:
+            trend_direction = "UPTREND"
+            trend_strength = uptrend_strength
+            active_analysis = uptrend_analysis
+            active_analysis['trend_type'] = 'uptrend'
+            print(f"✅ UPTREND CONFIRMED for {self.symbol} ({self.market_type}) on {self.period} timeframe")
+            print(f"   Higher Highs: {uptrend_analysis['hh_count']}")
+            print(f"   Higher Lows: {uptrend_analysis['hl_count']}")
+        elif downtrend_strength > uptrend_strength and downtrend_strength >= 4:
+            trend_direction = "DOWNTREND"
+            trend_strength = downtrend_strength
+            active_analysis = downtrend_analysis
+            active_analysis['trend_type'] = 'downtrend'
+            print(f"✅ DOWNTREND CONFIRMED for {self.symbol} ({self.market_type}) on {self.period} timeframe")
+            print(f"   Lower Highs: {downtrend_analysis['lh_count']}")
+            print(f"   Lower Lows: {downtrend_analysis['ll_count']}")
+        else:
+            print(f"📊 SIDEWAYS MARKET for {self.symbol} ({self.market_type}) on {self.period} timeframe")
+            print(f"   Uptrend strength: {uptrend_strength}")
+            print(f"   Downtrend strength: {downtrend_strength}")
+            # Use the stronger trend even if not confirmed
+            if uptrend_strength > downtrend_strength:
+                active_analysis = uptrend_analysis
+                active_analysis['trend_type'] = 'uptrend'
+            else:
+                active_analysis = downtrend_analysis
+                active_analysis['trend_type'] = 'downtrend'
+        
+        # Create combined result
+        combined_result = {
+            'trend_direction': trend_direction,
+            'trend_strength': trend_strength,
+            'uptrend_analysis': uptrend_analysis,
+            'downtrend_analysis': downtrend_analysis,
+            'active_analysis': active_analysis,
+            'timeframe': self.period
+        }
+        
+        # Add compatibility keys for existing code
+        if active_analysis:
+            if active_analysis.get('trend_type') == 'uptrend':
+                combined_result.update({
+                    'uptrend_confirmed': True,
+                    'hh_count': active_analysis.get('hh_count', 0),
+                    'hl_count': active_analysis.get('hl_count', 0),
+                    'higher_highs': active_analysis.get('higher_highs', []),
+                    'higher_lows': active_analysis.get('higher_lows', [])
+                })
+            else:
+                combined_result.update({
+                    'uptrend_confirmed': False,
+                    'downtrend_confirmed': True,
+                    'lh_count': active_analysis.get('lh_count', 0),
+                    'll_count': active_analysis.get('ll_count', 0),
+                    'lower_highs': active_analysis.get('lower_highs', []),
+                    'lower_lows': active_analysis.get('lower_lows', [])
+                })
+        else:
+            combined_result.update({
+                'uptrend_confirmed': False,
+                'downtrend_confirmed': False,
+                'hh_count': 0,
+                'hl_count': 0,
+                'lh_count': 0,
+                'll_count': 0
+            })
+        
+        return combined_result
     
     def plot_analysis(self, trend_analysis):
         """

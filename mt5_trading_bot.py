@@ -36,6 +36,14 @@ except ImportError:
     print("⚠️  TA library not available. Install with: pip install ta")
     TA_AVAILABLE = False
 
+# Smart Money Concept
+try:
+    from smart_money_concept import SmartMoneyConcept
+    SMC_AVAILABLE = True
+except ImportError:
+    print("⚠️  Smart Money Concept module not available")
+    SMC_AVAILABLE = False
+
 from dotenv import load_dotenv
 from trading_bot import TradingBot
 from mt5_connector import MT5Connector
@@ -45,7 +53,7 @@ load_dotenv()
 
 class MT5TradingBot:
     def __init__(self, symbol, timeframe, risk_per_trade=0.02, 
-                 use_mt5_data=True, auto_trade=False, use_ml=True):
+                 use_mt5_data=True, auto_trade=False, use_ml=True, use_smc=True):
         """
         Initialize MT5 integrated trading bot
         
@@ -56,6 +64,7 @@ class MT5TradingBot:
             use_mt5_data (bool): Use MT5 data instead of yfinance
             auto_trade (bool): Enable automatic trading
             use_ml (bool): Enable machine learning features
+            use_smc (bool): Enable Smart Money Concept analysis
         """
         self.symbol = symbol
         self.timeframe = timeframe
@@ -63,6 +72,7 @@ class MT5TradingBot:
         self.use_mt5_data = use_mt5_data
         self.auto_trade = auto_trade
         self.use_ml = use_ml and ML_AVAILABLE
+        self.use_smc = use_smc and SMC_AVAILABLE
         self.account_size = None  # Will be set from MT5 account info
         
         # ML Components
@@ -71,6 +81,11 @@ class MT5TradingBot:
         self.feature_columns = []
         self.model_trained = False
         self.prediction_threshold = 0.65  # Confidence threshold for ML signals
+        
+        # SMC Components
+        self.smc_analyzer = None
+        self.smc_signals = {}
+        self.smc_summary = {}
         
         # Initialize components
         self.analysis_bot = None
@@ -95,6 +110,12 @@ class MT5TradingBot:
                 print(f"✅ Loaded existing ML model: {default_model_name}")
             else:
                 print(f"📝 No existing ML model found. Will train new model when needed.")
+        
+        # Initialize SMC analyzer
+        if self.use_smc:
+            print(f"🧠 Smart Money Concept analysis enabled for {self.symbol}")
+        else:
+            print(f"⚠️  Smart Money Concept analysis disabled")
     
     def connect_mt5(self):
         """Connect to MT5 and get account information"""
@@ -415,12 +436,23 @@ class MT5TradingBot:
             # Create technical features
             data_with_features = self.create_technical_features(data)
             
+            # Check if we have the required feature columns
+            if not self.feature_columns or data_with_features is None:
+                print("⚠️  No feature columns available for ML prediction")
+                return None
+            
+            # Check if all feature columns exist in the data
+            missing_columns = [col for col in self.feature_columns if col not in data_with_features.columns]
+            if missing_columns:
+                print(f"⚠️  Missing feature columns: {missing_columns}")
+                return None
+            
             # Get latest data point
             latest_data = data_with_features[self.feature_columns].iloc[-1:].copy()
             
             # Check for NaN values
             if latest_data.isnull().any().any():
-                print("⚠️  Missing features for ML prediction")
+                print("⚠️  Missing features for ML prediction - using basic analysis only")
                 return None
             
             # Scale features
@@ -447,57 +479,118 @@ class MT5TradingBot:
     
     def analyze_market(self):
         """
-        Perform advanced market analysis using the new trading rules
+        Perform comprehensive market analysis including traditional TA, ML, and SMC
         
         Returns:
-            dict: Analysis results or None if failed
+            dict: Combined analysis results
         """
         try:
+            print(f"\n🔍 Analyzing {self.symbol} on {self.timeframe} timeframe...")
+            
             # Get market data
             data = self.get_market_data()
-            if data is None:
-                print("❌ No market data available")
+            if data is None or len(data) < 100:
+                print("❌ Insufficient data for analysis")
                 return None
             
-            # Verify data structure
-            required_columns = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume']
-            if not all(col in data.columns for col in required_columns):
-                print(f"❌ Data missing required columns. Available: {list(data.columns)}")
-                return None
-            
-            # Create analysis bot if not exists
+            # Initialize analysis bot if needed
             if self.analysis_bot is None:
-                self.analysis_bot = TradingBot(self.symbol, self.timeframe, "forex", 
-                                             self.account_size or 10000, self.risk_per_trade)
+                self.analysis_bot = TradingBot(self.symbol, self.timeframe)
             
-            # Assign data to the analysis bot
-            self.analysis_bot.data = data.copy()
+            # Update analysis bot data
+            self.analysis_bot.data = data
             
-            # Perform advanced analysis using new trading rules
-            print(f"\n🔍 PERFORMING ADVANCED MARKET ANALYSIS FOR {self.symbol}")
-            print("=" * 70)
+            # 1. Traditional Technical Analysis
+            print("📊 Performing Traditional Technical Analysis...")
+            traditional_signals = self.analysis_bot.analyze_market_trend()
             
-            analysis = self.analysis_bot.analyze_uptrend_advanced()
-            self.last_analysis = analysis
+            # 2. Smart Money Concept Analysis
+            smc_results = None
+            if self.use_smc:
+                smc_results = self.analyze_smc(data)
             
-            if analysis and analysis['uptrend_confirmed']:
-                print(f"\n✅ ANALYSIS COMPLETE - UPTREND CONFIRMED")
-                print(f"   Symbol: {self.symbol}")
-                print(f"   Timeframe: {self.timeframe}")
-                print(f"   Overall Strength: {analysis['overall_strength']:.1f}/100")
-                print(f"   Entry Conditions: {', '.join(analysis['entry_conditions']) if analysis['entry_conditions'] else 'None'}")
-            else:
-                print(f"\n❌ ANALYSIS COMPLETE - NO STRONG UPTREND")
-                if analysis:
-                    print(f"   Overall Strength: {analysis['overall_strength']:.1f}/100")
+            # 3. Machine Learning Analysis
+            ml_prediction = None
+            if self.use_ml and self.analysis_bot and self.analysis_bot.data is not None:
+                ml_prediction = self.get_ml_prediction(self.analysis_bot.data)
             
-            return analysis
+            # 4. Get SMC trading signals
+            smc_signals = None
+            if smc_results and self.smc_signals:
+                current_price = data['Close'].iloc[-1]
+                smc_signals = self.get_smc_trading_signals(current_price)
+            
+            # 5. Combine all signals
+            combined_signal = self.combine_signals(traditional_signals, smc_signals, ml_prediction)
+            
+            # Store analysis results
+            self.last_analysis = {
+                'timestamp': datetime.now(),
+                'symbol': self.symbol,
+                'timeframe': self.timeframe,
+                'traditional_signals': traditional_signals,
+                'smc_results': smc_results,
+                'ml_prediction': ml_prediction,
+                'combined_signal': combined_signal,
+                'current_price': data['Close'].iloc[-1] if len(data) > 0 else None
+            }
+            
+            # Print analysis summary
+            self.print_analysis_summary(combined_signal, traditional_signals, smc_results, ml_prediction)
+            
+            return combined_signal
             
         except Exception as e:
-            print(f"❌ Error analyzing market: {e}")
+            print(f"❌ Error in market analysis: {e}")
             import traceback
             traceback.print_exc()
             return None
+    
+    def print_analysis_summary(self, combined_signal, traditional_signals, smc_results, ml_prediction):
+        """Print comprehensive analysis summary"""
+        print(f"\n📋 Analysis Summary for {self.symbol} ({self.timeframe}):")
+        print("=" * 60)
+        
+        # Traditional Analysis
+        if traditional_signals:
+            print(f"📊 Traditional TA: {traditional_signals.get('signal_type', 'HOLD')}")
+            if traditional_signals.get('signal_strength'):
+                print(f"   Strength: {traditional_signals['signal_strength']:.2f}")
+        
+        # SMC Analysis
+        if smc_results and self.smc_summary:
+            print(f"🧠 Smart Money Concept:")
+            print(f"   Market Structure: {self.smc_summary['market_structure']['trend_direction']}")
+            print(f"   Order Blocks: {self.smc_summary['order_blocks']['total_count']}")
+            print(f"   Fair Value Gaps: {self.smc_summary['fair_value_gaps']['total_count']}")
+            print(f"   Liquidity Zones: {self.smc_summary['liquidity_zones']['total_count']}")
+        
+        # ML Analysis
+        if ml_prediction:
+            prediction = ml_prediction.get('prediction', 0.5)
+            confidence = ml_prediction.get('confidence', 0)
+            print(f"🤖 Machine Learning:")
+            print(f"   Prediction: {'BULLISH' if prediction > 0.6 else 'BEARISH' if prediction < 0.4 else 'NEUTRAL'}")
+            print(f"   Confidence: {confidence:.2f}")
+        
+        # Combined Signal
+        if combined_signal:
+            print(f"\n🎯 Combined Signal:")
+            print(f"   Type: {combined_signal['signal_type']}")
+            print(f"   Strength: {combined_signal['signal_strength']:.2f}")
+            print(f"   Sources: {', '.join(combined_signal['signal_sources'])}")
+            
+            if combined_signal.get('entry_price'):
+                print(f"   Entry: {combined_signal['entry_price']:.5f}")
+                print(f"   Stop Loss: {combined_signal['stop_loss']:.5f}")
+                print(f"   Target: {combined_signal['target']:.5f}")
+                
+                if combined_signal.get('potential_profit'):
+                    print(f"   Potential Profit: ${combined_signal['potential_profit']:.2f}")
+        else:
+            print(f"\n⚠️  No strong combined signal generated")
+        
+        print("=" * 60)
     
     def get_trading_signals(self, analysis):
         """
@@ -509,13 +602,22 @@ class MT5TradingBot:
         Returns:
             dict: Trading signals or None if no signals
         """
-        if not analysis or not analysis['uptrend_confirmed']:
-            print("❌ No strong uptrend confirmed - no trading signals")
-            return None
+        try:
+            # Check if we have a confirmed trend (either up or down)
+            uptrend_confirmed = analysis.get('uptrend_confirmed', False)
+            downtrend_confirmed = analysis.get('downtrend_confirmed', False)
+            trend_direction = analysis.get('trend_direction', 'SIDEWAYS')
+            
+            if not analysis or (not uptrend_confirmed and not downtrend_confirmed):
+                print(f"❌ No strong trend confirmed ({trend_direction}) - no trading signals")
+                return None
         
-        # Check for entry conditions
-        if not analysis['entry_conditions']:
-            print("ℹ️  No entry conditions met - waiting for breakout or continuation pattern")
+            # Check for entry conditions (can be relaxed for now since we're using basic analysis)
+            # if not analysis.get('entry_conditions', []):
+            #     print("ℹ️  No entry conditions met - waiting for breakout or continuation pattern")
+            #     return None
+        except Exception as e:
+            print(f"❌ Error checking analysis structure: {e}")
             return None
         
         print(f"\n🎯 GENERATING TRADING SIGNALS")
@@ -538,12 +640,20 @@ class MT5TradingBot:
             print("❌ Cannot get current market price")
             return None
         
-        # Initialize signal parameters
+        # Initialize signal parameters based on trend direction
         entry_price = current_price
         stop_loss_price = None
         target_price = None
-        signal_type = "BUY"
-        signal_strength = analysis['overall_strength']
+        
+        # Determine signal type based on trend
+        if uptrend_confirmed:
+            signal_type = "BUY"
+        elif downtrend_confirmed:
+            signal_type = "SELL"
+        else:
+            signal_type = "BUY"  # Default fallback
+            
+        signal_strength = analysis.get('overall_strength', 50)
         
         # Get symbol info for proper calculations
         symbol_info = None
@@ -554,18 +664,18 @@ class MT5TradingBot:
         digits = symbol_info.get('digits', 5) if symbol_info else 5
         
         # Process breakout and retest signals
-        if analysis['breakout_signals'] and analysis['breakout_signals']['entry_signal']:
+        breakout_signals = analysis.get('breakout_signals')
+        if breakout_signals and breakout_signals.get('entry_signal'):
             print("🎯 Using breakout and retest signals")
-            breakout = analysis['breakout_signals']
-            entry_price = breakout['entry_price']
-            stop_loss_price = breakout['stop_loss']
-            target_price = breakout['target']
+            entry_price = breakout_signals.get('entry_price', current_price)
+            stop_loss_price = breakout_signals.get('stop_loss')
+            target_price = breakout_signals.get('target')
             signal_type = "BREAKOUT_BUY"
         
         # Process continuation pattern signals
-        elif analysis['continuation_patterns']:
-            patterns = analysis['continuation_patterns']
-            if patterns['bullish_flag'] or patterns['pennant'] or patterns['inverted_head_shoulders']:
+        elif analysis.get('continuation_patterns'):
+            patterns = analysis.get('continuation_patterns', {})
+            if patterns.get('bullish_flag') or patterns.get('pennant') or patterns.get('inverted_head_shoulders'):
                 print("🎯 Using continuation pattern signals")
                 
                 # Calculate pattern-based entry and targets
@@ -600,30 +710,54 @@ class MT5TradingBot:
         else:
             print("🎯 Using trendline-based signals")
             
-            # Use H4 trendlines for entry signals
-            if analysis['h4_trendlines'] and 'hl_trendline' in analysis['h4_trendlines']:
-                hl_trendline = analysis['h4_trendlines']['hl_trendline']
-                if hl_trendline['touches'] >= 3:  # Strong support
+            # Use H4 trendlines for entry signals (if available)
+            h4_trendlines = analysis.get('h4_trendlines', {})
+            if h4_trendlines and 'hl_trendline' in h4_trendlines:
+                hl_trendline = h4_trendlines['hl_trendline']
+                if hl_trendline.get('touches', 0) >= 3:  # Strong support
                     # Entry on support touch
                     entry_price = current_price
-                    stop_loss_price = hl_trendline['end_price'] * 0.995  # Below support
+                    stop_loss_price = hl_trendline.get('end_price', current_price) * 0.995  # Below support
                     
                     # Calculate target based on trend strength
-                    if analysis['h4_trendlines'] and 'hh_trendline' in analysis['h4_trendlines']:
-                        hh_trendline = analysis['h4_trendlines']['hh_trendline']
-                        resistance_level = hh_trendline['end_price']
+                    if h4_trendlines and 'hh_trendline' in h4_trendlines:
+                        hh_trendline = h4_trendlines['hh_trendline']
+                        resistance_level = hh_trendline.get('end_price', current_price)
                         target_price = resistance_level * 1.005  # Above resistance
                     else:
                         # Use ATR-based target
-                        atr = self.calculate_atr(self.analysis_bot.h4_data, period=14)
+                        try:
+                            atr = self.calculate_atr(self.analysis_bot.data, period=14) if self.analysis_bot and self.analysis_bot.data is not None else 0.0002
+                        except:
+                            atr = 0.0002
                         target_price = entry_price + (atr * 6)  # 1:3 ratio
                     
-                    signal_type = "TRENDLINE_BUY"
+                    signal_type = f"TRENDLINE_{signal_type}"
         
         # Validate and adjust stop loss and target
         if stop_loss_price is None or target_price is None:
-            print("❌ Could not calculate proper stop loss or target")
-            return None
+            print("🎯 Using default risk-based stop loss and target calculation")
+            
+            # Calculate ATR for dynamic stop loss
+            atr = 0.0002  # Default ATR for forex pairs
+            if self.analysis_bot and self.analysis_bot.data is not None:
+                try:
+                    high_low = self.analysis_bot.data['High'] - self.analysis_bot.data['Low']
+                    atr = high_low.rolling(window=14).mean().iloc[-1]
+                except:
+                    atr = 0.0002
+            
+            # Set stop loss and target based on signal type
+            if signal_type == "SELL" or downtrend_confirmed:
+                # For SELL signals
+                stop_loss_price = entry_price + (atr * 2)  # Stop above entry
+                target_price = entry_price - (atr * 6)     # Target below entry (1:3 ratio)
+                signal_type = "SELL" if signal_type != "SELL" else signal_type
+            else:
+                # For BUY signals (default)
+                stop_loss_price = entry_price - (atr * 2)  # Stop below entry
+                target_price = entry_price + (atr * 6)     # Target above entry (1:3 ratio)
+                signal_type = "BUY" if signal_type != "BUY" else signal_type
         
         # Ensure minimum stop level compliance
         if symbol_info and 'trade_stops_level' in symbol_info:
@@ -638,19 +772,41 @@ class MT5TradingBot:
                 else:  # Short position
                     stop_loss_price = entry_price + min_stop_distance
         
-        # Calculate risk and reward
-        risk_amount = abs(entry_price - stop_loss_price)
-        reward_amount = abs(target_price - entry_price)
-        risk_reward_ratio = reward_amount / risk_amount if risk_amount > 0 else 0
+        # Calculate risk and reward in price terms
+        price_risk = abs(entry_price - stop_loss_price)
+        price_reward = abs(target_price - entry_price)
+        risk_reward_ratio = price_reward / price_risk if price_risk > 0 else 0
         
-        # Calculate position size based on risk
+        # Calculate position size based on risk (for forex)
         risk_per_trade_amount = self.account_size * self.risk_per_trade
-        position_size = risk_per_trade_amount / risk_amount if risk_amount > 0 else 0
+        
+        # For forex, position size = risk amount / (stop loss distance in pips * pip value)
+        # Pip value for EURUSD = 0.0001, so 1 pip = $1 per 10,000 units (0.1 lots)
+        pip_size = 0.0001 if 'JPY' not in self.symbol else 0.01
+        stop_loss_pips = price_risk / pip_size
+        target_pips = price_reward / pip_size
+        
+        if stop_loss_pips > 0:
+            # Position size in lots (1 lot = 100,000 units for major pairs)
+            position_size = risk_per_trade_amount / (stop_loss_pips * 10)  # $10 per pip per lot for EURUSD
+            # Cap position size to reasonable limits
+            position_size = min(position_size, 10.0)  # Max 10 lots
+            position_size = max(position_size, 0.01)  # Min 0.01 lots
+        else:
+            position_size = 0.01  # Default minimum
+        
+        # Calculate actual dollar amounts
+        risk_amount = position_size * stop_loss_pips * 10  # $10 per pip per lot
+        reward_amount = position_size * target_pips * 10
         
         # Get ML prediction for confirmation
         ml_prediction = None
-        if self.use_ml and self.analysis_bot:
-            ml_prediction = self.get_ml_prediction(self.analysis_bot.h4_data)
+        if self.use_ml and self.analysis_bot and hasattr(self.analysis_bot, 'data') and self.analysis_bot.data is not None:
+            try:
+                ml_prediction = self.get_ml_prediction(self.analysis_bot.data)
+            except Exception as e:
+                print(f"❌ ML prediction failed: {e}")
+                ml_prediction = None
         
         # Create final signal
         signals = {
@@ -663,13 +819,13 @@ class MT5TradingBot:
             'risk_reward_ratio': round(risk_reward_ratio, 2),
             'position_size': round(position_size, 2),
             'signal_strength': signal_strength,
-            'entry_conditions': analysis['entry_conditions'],
+            'entry_conditions': analysis.get('entry_conditions', []),
             'ml_prediction': ml_prediction,
             'analysis_summary': {
-                'overall_strength': analysis['overall_strength'],
-                'weekly_strength': analysis['weekly_analysis']['trend_strength'],
-                'daily_strength': analysis['daily_analysis']['trend_strength'],
-                'h4_strength': analysis['h4_analysis']['trend_strength']
+                'overall_strength': analysis.get('overall_strength', 50),
+                'weekly_strength': analysis.get('weekly_analysis', {}).get('trend_strength', 0),
+                'daily_strength': analysis.get('daily_analysis', {}).get('trend_strength', 0),
+                'h4_strength': analysis.get('h4_analysis', {}).get('trend_strength', 0)
             }
         }
         
@@ -713,58 +869,6 @@ class MT5TradingBot:
         except Exception as e:
             print(f"⚠️  Error calculating ATR: {e}")
             return 0.001
-        ml_prediction = None
-        if self.use_ml and self.analysis_bot and self.analysis_bot.data is not None:
-            ml_prediction = self.get_ml_prediction(self.analysis_bot.data)
-        
-        # Calculate position size
-        position_size = None
-        if self.connected:
-            position_size = self.mt5_connector.calculate_position_size(
-                self.account_size * self.risk_per_trade,
-                entry_price,
-                stop_loss_price,
-                self.symbol
-            )
-        
-        # Determine signal strength and type
-        signal_strength = 1.0  # Base strength from traditional analysis
-        signal_type = 'BUY'
-        
-        if ml_prediction:
-            # Combine traditional and ML signals
-            ml_confidence = ml_prediction['confidence']
-            ml_signal = ml_prediction['prediction']
-            
-            if ml_signal == 1 and ml_confidence >= self.prediction_threshold:
-                # ML confirms buy signal
-                signal_strength = min(1.0, signal_strength + ml_confidence * 0.5)
-                print(f"🤖 ML Confirms BUY Signal (Confidence: {ml_confidence:.2f})")
-            elif ml_signal == 0 and ml_confidence >= self.prediction_threshold:
-                # ML disagrees with traditional analysis
-                signal_strength = signal_strength * 0.3
-                print(f"🤖 ML Disagrees with Signal (Confidence: {ml_confidence:.2f})")
-            else:
-                print(f"🤖 ML Neutral (Confidence: {ml_confidence:.2f})")
-        
-        # Only generate signal if strength is sufficient
-        if signal_strength < 0.5:
-            print(f"⚠️  Signal strength too low: {signal_strength:.2f}")
-            return None
-        
-        return {
-            'signal_type': signal_type,
-            'entry_price': entry_price,
-            'stop_loss': stop_loss_price,
-            'target': target_price,
-            'position_size': position_size,
-            'risk_amount': self.account_size * self.risk_per_trade,
-            'potential_profit': (target_price - entry_price) * (position_size * 100000) if position_size is not None else 0,
-            'timeframe': self.timeframe,
-            'analysis': analysis,
-            'ml_prediction': ml_prediction,
-            'signal_strength': signal_strength
-        }
     
     def execute_trade(self, signals):
         """
@@ -1059,7 +1163,41 @@ class MT5TradingBot:
                                          self.account_size or 10000, self.risk_per_trade)
         
         self.analysis_bot.data = data.copy()
-        analysis = self.analysis_bot.analyze_uptrend()
+        analysis = self.analysis_bot.analyze_market_trend()
+        
+        # Add missing keys that the advanced analysis would have
+        if analysis:
+            analysis['entry_conditions'] = []
+            analysis['overall_strength'] = analysis.get('trend_strength', 50)
+            
+            # Create primary_analysis with safe key access
+            analysis['primary_analysis'] = {
+                'hh_count': analysis.get('hh_count', 0),
+                'hl_count': analysis.get('hl_count', 0),
+                'lh_count': analysis.get('lh_count', 0),
+                'll_count': analysis.get('ll_count', 0),
+                'higher_highs': analysis.get('higher_highs', []),
+                'higher_lows': analysis.get('higher_lows', []),
+                'lower_highs': analysis.get('lower_highs', []),
+                'lower_lows': analysis.get('lower_lows', []),
+                'uptrend_confirmed': analysis.get('uptrend_confirmed', False),
+                'downtrend_confirmed': analysis.get('downtrend_confirmed', False),
+                'trend_direction': analysis.get('trend_direction', 'SIDEWAYS'),
+                'trend_strength': analysis.get('trend_strength', 0)
+            }
+            
+            analysis['h4_analysis'] = {'hh_count': 0, 'hl_count': 0, 'uptrend_confirmed': False}
+            analysis['strong_trendlines'] = []
+            analysis['breakout_signals'] = None
+            analysis['continuation_patterns'] = None
+            analysis['trading_rules_followed'] = {
+                'multi_timeframe_confirmed': False,
+                'min_hh_hl_met': (analysis.get('hh_count', 0) >= 2 and analysis.get('hl_count', 0) >= 2) or 
+                                (analysis.get('lh_count', 0) >= 2 and analysis.get('ll_count', 0) >= 2),
+                'strong_trendlines': False,
+                'breakout_retest_ready': False,
+                'continuation_patterns_ready': False
+            }
         
         if not analysis:
             print("❌ Traditional analysis failed")
@@ -1229,6 +1367,305 @@ class MT5TradingBot:
         except Exception as e:
             print(f"❌ Failed to load model: {e}")
             return False
+
+    def analyze_smc(self, data):
+        """
+        Perform Smart Money Concept analysis on the data
+        
+        Args:
+            data (pd.DataFrame): Price data with OHLCV columns
+            
+        Returns:
+            dict: SMC analysis results
+        """
+        if not self.use_smc or data is None or len(data) < 100:
+            return None
+        
+        try:
+            print(f"🧠 Performing Smart Money Concept analysis for {self.symbol}...")
+            
+            # Initialize SMC analyzer
+            self.smc_analyzer = SmartMoneyConcept(data, self.timeframe)
+            
+            # Get current price
+            current_price = data['Close'].iloc[-1]
+            
+            # Get SMC signals
+            self.smc_signals = self.smc_analyzer.get_smc_signals(current_price)
+            
+            # Get SMC summary
+            self.smc_summary = self.smc_analyzer.get_smc_summary()
+            
+            print(f"✅ SMC Analysis Complete:")
+            print(f"   📊 Market Structure: {self.smc_summary['market_structure']['trend_direction']}")
+            print(f"   📦 Order Blocks: {self.smc_summary['order_blocks']['total_count']}")
+            print(f"   🕳️ Fair Value Gaps: {self.smc_summary['fair_value_gaps']['total_count']}")
+            print(f"   💧 Liquidity Zones: {self.smc_summary['liquidity_zones']['total_count']}")
+            print(f"   🏢 Institutional OBs: {self.smc_summary['institutional_order_blocks']['total_count']}")
+            
+            return {
+                'signals': self.smc_signals,
+                'summary': self.smc_summary,
+                'current_price': current_price
+            }
+            
+        except Exception as e:
+            print(f"❌ Error in SMC analysis: {e}")
+            return None
+    
+    def get_smc_trading_signals(self, current_price):
+        """
+        Generate trading signals based on SMC analysis
+        
+        Args:
+            current_price (float): Current market price
+            
+        Returns:
+            dict: Trading signals with entry, stop loss, and target levels
+        """
+        if not self.use_smc or not self.smc_signals:
+            return None
+        
+        signals = []
+        
+        # Process Order Block signals
+        for ob_signal in self.smc_signals.get('order_block_signals', []):
+            if ob_signal['type'] == 'Bullish_OB_Entry':
+                # Calculate target based on order block strength
+                target_distance = (ob_signal['ob_level'] - ob_signal['stop_loss']) * 2
+                target_price = current_price + target_distance
+                
+                signals.append({
+                    'type': 'BUY',
+                    'entry_price': current_price,
+                    'stop_loss': ob_signal['stop_loss'],
+                    'target': target_price,
+                    'source': 'Order_Block',
+                    'strength': ob_signal['strength'] / 100,
+                    'timestamp': ob_signal['timestamp']
+                })
+            
+            elif ob_signal['type'] == 'Bearish_OB_Entry':
+                # Calculate target based on order block strength
+                target_distance = (ob_signal['stop_loss'] - ob_signal['ob_level']) * 2
+                target_price = current_price - target_distance
+                
+                signals.append({
+                    'type': 'SELL',
+                    'entry_price': current_price,
+                    'stop_loss': ob_signal['stop_loss'],
+                    'target': target_price,
+                    'source': 'Order_Block',
+                    'strength': ob_signal['strength'] / 100,
+                    'timestamp': ob_signal['timestamp']
+                })
+        
+        # Process Fair Value Gap signals
+        for fvg_signal in self.smc_signals.get('fvg_signals', []):
+            if fvg_signal['type'] == 'Bullish_FVG_Fill':
+                target_price = current_price + (fvg_signal['gap_size'] * 3)
+                
+                signals.append({
+                    'type': 'BUY',
+                    'entry_price': current_price,
+                    'stop_loss': fvg_signal['stop_loss'],
+                    'target': target_price,
+                    'source': 'Fair_Value_Gap',
+                    'strength': min(0.8, fvg_signal['gap_size'] * 1000),
+                    'timestamp': fvg_signal['timestamp']
+                })
+            
+            elif fvg_signal['type'] == 'Bearish_FVG_Fill':
+                target_price = current_price - (fvg_signal['gap_size'] * 3)
+                
+                signals.append({
+                    'type': 'SELL',
+                    'entry_price': current_price,
+                    'stop_loss': fvg_signal['stop_loss'],
+                    'target': target_price,
+                    'source': 'Fair_Value_Gap',
+                    'strength': min(0.8, fvg_signal['gap_size'] * 1000),
+                    'timestamp': fvg_signal['timestamp']
+                })
+        
+        # Process Market Structure signals
+        for ms_signal in self.smc_signals.get('market_structure_signals', []):
+            if ms_signal['type'] == 'Bullish_BOS':
+                # Break of Structure - bullish continuation
+                target_price = current_price + (current_price - ms_signal['level']) * 2
+                
+                signals.append({
+                    'type': 'BUY',
+                    'entry_price': current_price,
+                    'stop_loss': ms_signal['level'],
+                    'target': target_price,
+                    'source': 'Break_of_Structure',
+                    'strength': 0.7,
+                    'timestamp': ms_signal['timestamp']
+                })
+            
+            elif ms_signal['type'] == 'Bearish_BOS':
+                # Break of Structure - bearish continuation
+                target_price = current_price - (ms_signal['level'] - current_price) * 2
+                
+                signals.append({
+                    'type': 'SELL',
+                    'entry_price': current_price,
+                    'stop_loss': ms_signal['level'],
+                    'target': target_price,
+                    'source': 'Break_of_Structure',
+                    'strength': 0.7,
+                    'timestamp': ms_signal['timestamp']
+                })
+        
+        # Process Institutional Order Block signals
+        for iob_signal in self.smc_signals.get('institutional_signals', []):
+            if 'Bullish_IOB' in iob_signal['type']:
+                target_price = current_price + (current_price * 0.01)  # 1% target
+                
+                signals.append({
+                    'type': 'BUY',
+                    'entry_price': current_price,
+                    'stop_loss': current_price * 0.995,  # 0.5% stop loss
+                    'target': target_price,
+                    'source': 'Institutional_OB',
+                    'strength': min(0.9, iob_signal['volume_ratio'] / 5),
+                    'timestamp': iob_signal['timestamp']
+                })
+            
+            elif 'Bearish_IOB' in iob_signal['type']:
+                target_price = current_price - (current_price * 0.01)  # 1% target
+                
+                signals.append({
+                    'type': 'SELL',
+                    'entry_price': current_price,
+                    'stop_loss': current_price * 1.005,  # 0.5% stop loss
+                    'target': target_price,
+                    'source': 'Institutional_OB',
+                    'strength': min(0.9, iob_signal['volume_ratio'] / 5),
+                    'timestamp': iob_signal['timestamp']
+                })
+        
+        return signals
+    
+    def combine_signals(self, traditional_signals, smc_signals, ml_prediction=None):
+        """
+        Combine traditional, SMC, and ML signals for final decision
+        
+        Args:
+            traditional_signals (dict): Traditional technical analysis signals
+            smc_signals (list): Smart Money Concept signals
+            ml_prediction (dict): Machine learning prediction
+            
+        Returns:
+            dict: Combined trading signal
+        """
+        if not traditional_signals and not smc_signals:
+            return None
+        
+        # Initialize combined signal
+        combined_signal = {
+            'signal_type': None,
+            'entry_price': None,
+            'stop_loss': None,
+            'target': None,
+            'position_size': None,
+            'risk_amount': self.account_size * self.risk_per_trade if self.account_size else 0,
+            'potential_profit': 0,
+            'timeframe': self.timeframe,
+            'analysis': traditional_signals,
+            'ml_prediction': ml_prediction,
+            'smc_signals': smc_signals,
+            'signal_strength': 0.0,
+            'signal_sources': []
+        }
+        
+        # Process traditional signals
+        if traditional_signals:
+            combined_signal['signal_type'] = traditional_signals.get('signal_type', 'HOLD')
+            combined_signal['entry_price'] = traditional_signals.get('entry_price')
+            combined_signal['stop_loss'] = traditional_signals.get('stop_loss')
+            combined_signal['target'] = traditional_signals.get('target')
+            combined_signal['position_size'] = traditional_signals.get('position_size')
+            combined_signal['signal_strength'] = traditional_signals.get('signal_strength', 0.5)
+            combined_signal['signal_sources'].append('Traditional_TA')
+        
+        # Process SMC signals
+        if smc_signals:
+            # Find the strongest SMC signal
+            strongest_smc = max(smc_signals, key=lambda x: x['strength']) if smc_signals else None
+            
+            if strongest_smc and strongest_smc['strength'] > 0.6:
+                # SMC signal is strong enough to override or enhance traditional signal
+                if combined_signal['signal_type'] == 'HOLD' or combined_signal['signal_type'] is None:
+                    # No traditional signal, use SMC signal
+                    combined_signal['signal_type'] = strongest_smc['type']
+                    combined_signal['entry_price'] = strongest_smc['entry_price']
+                    combined_signal['stop_loss'] = strongest_smc['stop_loss']
+                    combined_signal['target'] = strongest_smc['target']
+                    combined_signal['signal_strength'] = strongest_smc['strength']
+                    combined_signal['signal_sources'] = [strongest_smc['source']]
+                
+                elif combined_signal['signal_type'] == strongest_smc['type']:
+                    # Signals agree - enhance strength
+                    combined_signal['signal_strength'] = min(1.0, combined_signal['signal_strength'] + strongest_smc['strength'] * 0.3)
+                    combined_signal['signal_sources'].append(strongest_smc['source'])
+                
+                else:
+                    # Signals conflict - use the stronger one
+                    if strongest_smc['strength'] > combined_signal['signal_strength']:
+                        combined_signal['signal_type'] = strongest_smc['type']
+                        combined_signal['entry_price'] = strongest_smc['entry_price']
+                        combined_signal['stop_loss'] = strongest_smc['stop_loss']
+                        combined_signal['target'] = strongest_smc['target']
+                        combined_signal['signal_strength'] = strongest_smc['strength']
+                        combined_signal['signal_sources'] = [strongest_smc['source']]
+        
+        # Process ML prediction
+        if ml_prediction and self.use_ml:
+            ml_confidence = ml_prediction.get('confidence', 0)
+            ml_signal = ml_prediction.get('prediction', 0.5)
+            
+            if ml_confidence >= self.prediction_threshold:
+                if ml_signal > 0.6:  # Bullish
+                    if combined_signal['signal_type'] == 'BUY':
+                        combined_signal['signal_strength'] = min(1.0, combined_signal['signal_strength'] + ml_confidence * 0.2)
+                    elif combined_signal['signal_type'] == 'SELL':
+                        # ML disagrees with bearish signal
+                        combined_signal['signal_strength'] = combined_signal['signal_strength'] * 0.5
+                    combined_signal['signal_sources'].append('ML_Bullish')
+                
+                elif ml_signal < 0.4:  # Bearish
+                    if combined_signal['signal_type'] == 'SELL':
+                        combined_signal['signal_strength'] = min(1.0, combined_signal['signal_strength'] + ml_confidence * 0.2)
+                    elif combined_signal['signal_type'] == 'BUY':
+                        # ML disagrees with bullish signal
+                        combined_signal['signal_strength'] = combined_signal['signal_strength'] * 0.5
+                    combined_signal['signal_sources'].append('ML_Bearish')
+        
+        # Calculate position size if we have entry and stop loss
+        if combined_signal['entry_price'] and combined_signal['stop_loss'] and self.connected:
+            combined_signal['position_size'] = self.mt5_connector.calculate_position_size(
+                combined_signal['risk_amount'],
+                combined_signal['entry_price'],
+                combined_signal['stop_loss'],
+                self.symbol
+            )
+            
+            # Calculate potential profit
+            if combined_signal['position_size'] and combined_signal['target']:
+                if combined_signal['signal_type'] == 'BUY':
+                    profit_pips = (combined_signal['target'] - combined_signal['entry_price']) * 100000
+                else:
+                    profit_pips = (combined_signal['entry_price'] - combined_signal['target']) * 100000
+                combined_signal['potential_profit'] = profit_pips * combined_signal['position_size']
+        
+        # Only return signal if strength is sufficient
+        if combined_signal['signal_strength'] < 0.5:
+            print(f"⚠️  Combined signal strength too low: {combined_signal['signal_strength']:.2f}")
+            return None
+        
+        return combined_signal
 
 def main():
     """Main function for MT5 trading bot"""
