@@ -41,7 +41,7 @@ bot_config = {
     'symbol': 'EURUSD',
     'timeframe': '5m',
     'risk_per_trade': float(os.getenv('RISK_PER_TRADE', 0.02)),
-    'account_size': float(os.getenv('ACCOUNT_SIZE', 10000)),
+            'account_size': None,  # No longer used - balance fetched from MT5
     'auto_trade': os.getenv('AUTO_TRADE', 'false').lower() == 'true',
     'use_ml': os.getenv('USE_ML', 'true').lower() == 'true'
 }
@@ -119,7 +119,7 @@ def get_env_config():
         'symbol': 'EURUSD',
         'timeframe': '5m',
         'risk_per_trade': float(os.getenv('RISK_PER_TRADE', 0.02)),
-        'account_size': float(os.getenv('ACCOUNT_SIZE', 10000)),
+        'account_size': None,  # No longer used - balance fetched from MT5
         'auto_trade': os.getenv('AUTO_TRADE', 'false').lower() == 'true',
         'use_ml': os.getenv('USE_ML', 'true').lower() == 'true'
     }
@@ -140,25 +140,55 @@ def connect_mt5():
         password = data.get('password')
         server = data.get('server', '')
         
+        print(f"\n🔗 CONNECTING TO MT5")
+        print(f"   Account: {account_number}")
+        print(f"   Server: {server}")
+        
         if not account_number or not password or not server:
             return jsonify({'success': False, 'error': 'Account number, password, and server are required'}), 400
         
+        # Validate account number format
+        try:
+            int(account_number)
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Account number must be numeric'}), 400
+        
         # Create MT5 connector
+        print("🔄 Creating MT5 connector...")
         connector = MT5Connector(account_number, password, server)
         
         # Try to connect
+        print("🔄 Attempting connection...")
         if connector.connect():
+            print("✅ MT5 connection successful")
+            
+            # Test basic functionality
+            print("🧪 Testing MT5 functionality...")
+            if not connector.test_mt5_functionality():
+                connector.disconnect()
+                return jsonify({
+                    'success': False, 
+                    'error': 'MT5 connection established but functionality test failed. Please check your MT5 terminal settings.'
+                }), 400
+            
             # Get account info
             account_info = connector.get_account_summary()
+            if not account_info:
+                connector.disconnect()
+                return jsonify({'success': False, 'error': 'Failed to retrieve account information'}), 400
             
-            # Update global config
+            print(f"💰 Account Balance: ${account_info.get('balance', 0):,.2f}")
+            print(f"💰 Account Equity: ${account_info.get('equity', 0):,.2f}")
+            
+            # Update global config with credentials
             bot_config.update({
                 'account_number': account_number,
                 'password': password,
                 'server': server
             })
             
-            # Store connector globally for reuse
+            # Create or update bot instance
+            print("🤖 Creating/updating bot instance...")
             bot_instance = MT5TradingBot(
                 symbol=bot_config.get('symbol', 'EURUSD'),
                 timeframe=bot_config.get('timeframe', '5m'),
@@ -167,20 +197,51 @@ def connect_mt5():
                 auto_trade=False,
                 use_ml=bot_config.get('use_ml', True)
             )
+            
+            # Assign the working connector to the bot
             bot_instance.mt5_connector = connector
             bot_instance.connected = True
-            bot_instance.account_size = account_info.get('balance', 10000) if account_info else 10000
+            # Account balance is now fetched dynamically from MT5
+            
+            # Test market data retrieval
+            print("📊 Testing market data retrieval...")
+            test_data = bot_instance.get_market_data()
+            if test_data is None or len(test_data) < 10:
+                print("⚠️  Limited market data available, but connection is working")
+            else:
+                print(f"✅ Market data test successful ({len(test_data)} data points)")
             
             return jsonify({
                 'success': True,
                 'message': 'Successfully connected to MT5',
-                'account_info': account_info
+                'account_info': {
+                    'login': account_info.get('login'),
+                    'server': account_info.get('server'),
+                    'balance': account_info.get('balance', 0),
+                    'equity': account_info.get('equity', 0),
+                    'margin': account_info.get('margin', 0),
+                    'margin_free': account_info.get('margin_free', 0),
+                    'currency': account_info.get('currency', 'USD')
+                },
+                'connection_details': {
+                    'account_number': account_number,
+                    'server': server,
+                    'connected': True,
+                    'data_available': test_data is not None and len(test_data) > 0
+                }
             })
         else:
-            return jsonify({'success': False, 'error': 'Failed to connect to MT5'}), 400
+            print("❌ MT5 connection failed")
+            return jsonify({
+                'success': False, 
+                'error': 'Failed to connect to MT5. Please check your credentials, server name, and ensure MT5 terminal is running.'
+            }), 400
     
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        print(f"❌ Connection error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': f'Connection error: {str(e)}'}), 500
 
 @app.route('/api/analyze', methods=['POST'])
 def analyze_market():
@@ -326,32 +387,128 @@ def start_trading():
     try:
         data = request.get_json()
         auto_trade = data.get('auto_trade', True)
+        symbol = data.get('symbol', bot_config.get('symbol', 'EURUSD'))
+        timeframe = data.get('timeframe', bot_config.get('timeframe', '5m'))
         
-        if not bot_instance:
-            return jsonify({'success': False, 'error': 'No bot instance. Run analysis first.'}), 400
+        print(f"\n🚀 STARTING TRADING SESSION")
+        print(f"   Symbol: {symbol}")
+        print(f"   Timeframe: {timeframe}")
+        print(f"   Auto Trade: {auto_trade}")
         
-        if not bot_instance.connected:
-            return jsonify({'success': False, 'error': 'Not connected to MT5. Please connect first.'}), 400
-        
+        # Check if trading is already running
         if bot_running:
             return jsonify({'success': False, 'error': 'Trading is already running'}), 400
+        
+        # Create or recreate bot instance with proper MT5 connection
+        try:
+            print("🔄 Creating/updating bot instance...")
+            
+            # Create new bot instance with MT5 connection
+            new_bot = MT5TradingBot(
+                symbol=symbol,
+                timeframe=timeframe,
+                risk_per_trade=bot_config.get('risk_per_trade', 0.02),
+                use_mt5_data=True,
+                auto_trade=auto_trade,
+                use_ml=bot_config.get('use_ml', True)
+            )
+            
+            # Try to establish MT5 connection using stored credentials
+            if bot_config.get('account_number') and bot_config.get('password') and bot_config.get('server'):
+                print("🔗 Attempting MT5 connection with stored credentials...")
+                
+                # Create MT5 connector with credentials
+                from mt5_connector import MT5Connector
+                connector = MT5Connector(
+                    account_number=bot_config['account_number'],
+                    password=bot_config['password'],
+                    server=bot_config['server']
+                )
+                
+                # Try to connect
+                if connector.connect():
+                    print("✅ MT5 connection established")
+                    new_bot.mt5_connector = connector
+                    new_bot.connected = True
+                    
+                    # Get account info
+                    account_info = connector.get_account_summary()
+                    if account_info:
+                        # Account balance is now fetched dynamically from MT5
+                        print(f"💰 Account Balance: ${account_info.get('balance', 0):,.2f}")
+                    
+                    # Update global bot instance
+                    bot_instance = new_bot
+                    
+                else:
+                    return jsonify({
+                        'success': False, 
+                        'error': 'Failed to connect to MT5. Please check your credentials and try connecting first.'
+                    }), 400
+            else:
+                return jsonify({
+                    'success': False, 
+                    'error': 'MT5 credentials not configured. Please connect to MT5 first.'
+                }), 400
+            
+        except Exception as e:
+            print(f"❌ Error creating bot instance: {e}")
+            return jsonify({'success': False, 'error': f'Failed to create bot instance: {str(e)}'}), 500
+        
+        # Verify connection is working
+        if not bot_instance or not bot_instance.connected:
+            return jsonify({
+                'success': False, 
+                'error': 'Not connected to MT5. Please connect first.'
+            }), 400
+        
+        # Test MT5 functionality before starting trading
+        print("🧪 Testing MT5 functionality...")
+        if not bot_instance.mt5_connector.test_mt5_functionality():
+            return jsonify({
+                'success': False, 
+                'error': 'MT5 functionality test failed. Please check your MT5 terminal.'
+            }), 400
+        
+        # Run initial analysis to ensure signals can be generated
+        print("📊 Running initial market analysis...")
+        initial_analysis = bot_instance.run_analysis_cycle()
+        if not initial_analysis:
+            return jsonify({
+                'success': False, 
+                'error': 'Failed to perform initial market analysis. Insufficient data or connection issues.'
+            }), 400
         
         # Update bot configuration
         bot_instance.auto_trade = auto_trade
         bot_config['auto_trade'] = auto_trade
+        bot_config['symbol'] = symbol
+        bot_config['timeframe'] = timeframe
         
         # Start trading in a separate thread
+        print("🎯 Starting trading loop...")
         bot_running = True
-        bot_thread = threading.Thread(target=run_trading_loop)
+        bot_thread = threading.Thread(target=run_trading_loop, name="TradingThread")
         bot_thread.daemon = True
         bot_thread.start()
         
         return jsonify({
             'success': True,
-            'message': 'Trading started successfully'
+            'message': f'Trading started successfully for {symbol} on {timeframe} timeframe',
+            'details': {
+                'symbol': symbol,
+                'timeframe': timeframe,
+                'auto_trade': auto_trade,
+                'account_balance': None,  # Balance fetched dynamically from MT5
+                'risk_per_trade': bot_config.get('risk_per_trade', 0.02) * 100,
+                'connected': True
+            }
         })
     
     except Exception as e:
+        print(f"❌ Error starting trading: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/stop-trading', methods=['POST'])
@@ -387,18 +544,62 @@ def get_status():
         'config': bot_config,
         'connected': False,
         'positions': [],
-        'account_info': None
+        'account_info': None,
+        'connection_details': {
+            'has_bot_instance': bot_instance is not None,
+            'has_mt5_connector': False,
+            'mt5_initialized': False,
+            'credentials_configured': False
+        }
     }
     
-    if bot_instance and hasattr(bot_instance, 'connected') and bot_instance.connected:
-        status['connected'] = True
-        try:
-            status['positions'] = bot_instance.monitor_positions() or []
-            status['account_info'] = bot_instance.mt5_connector.get_account_summary()
-        except Exception as e:
-            print(f"Error getting status: {e}")
-            status['positions'] = []
-            status['account_info'] = None
+    # Check if credentials are configured
+    if (bot_config.get('account_number') and 
+        bot_config.get('password') and 
+        bot_config.get('server')):
+        status['connection_details']['credentials_configured'] = True
+    
+    # Check bot instance and connection
+    if bot_instance:
+        status['connection_details']['has_bot_instance'] = True
+        
+        if hasattr(bot_instance, 'mt5_connector') and bot_instance.mt5_connector:
+            status['connection_details']['has_mt5_connector'] = True
+            
+            if hasattr(bot_instance, 'connected') and bot_instance.connected:
+                status['connected'] = True
+                status['connection_details']['mt5_initialized'] = True
+                
+                try:
+                    # Get positions with error handling
+                    positions = bot_instance.monitor_positions()
+                    status['positions'] = positions if positions is not None else []
+                    
+                    # Get account info with error handling
+                    account_info = bot_instance.mt5_connector.get_account_summary()
+                    if account_info:
+                        status['account_info'] = {
+                            'login': account_info.get('login'),
+                            'server': account_info.get('server'),
+                            'balance': account_info.get('balance', 0),
+                            'equity': account_info.get('equity', 0),
+                            'margin': account_info.get('margin', 0),
+                            'margin_free': account_info.get('margin_free', 0),
+                            'currency': account_info.get('currency', 'USD')
+                        }
+                    
+                    # Test connection health
+                    try:
+                        test_price = bot_instance.mt5_connector.get_current_price('EURUSD')
+                        status['connection_details']['connection_healthy'] = test_price is not None
+                    except:
+                        status['connection_details']['connection_healthy'] = False
+                        
+                except Exception as e:
+                    print(f"Error getting detailed status: {e}")
+                    status['positions'] = []
+                    status['account_info'] = None
+                    status['connection_details']['connection_healthy'] = False
     
     return jsonify(status)
 
@@ -681,26 +882,111 @@ def run_trading_loop():
     """Run the trading loop in a separate thread"""
     global bot_instance, bot_running
     
+    print("🎯 Trading loop started")
+    cycle_count = 0
+    
     try:
         while bot_running and bot_instance:
-            # Run analysis cycle
-            analysis = bot_instance.run_analysis_cycle()
+            cycle_count += 1
+            print(f"\n🔄 Trading Cycle #{cycle_count} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             
-            # Monitor positions
-            if bot_instance.connected:
-                bot_instance.monitor_positions()
+            try:
+                # Check MT5 connection status
+                if not bot_instance.connected or not bot_instance.mt5_connector:
+                    print("❌ MT5 connection lost. Attempting to reconnect...")
+                    
+                    # Try to reconnect
+                    if bot_instance.mt5_connector:
+                        if bot_instance.mt5_connector.connect():
+                            bot_instance.connected = True
+                            print("✅ MT5 reconnected successfully")
+                        else:
+                            print("❌ Failed to reconnect to MT5. Stopping trading.")
+                            break
+                    else:
+                        print("❌ No MT5 connector available. Stopping trading.")
+                        break
+                
+                # Run analysis cycle
+                print("📊 Running market analysis...")
+                analysis = bot_instance.run_analysis_cycle()
+                
+                if analysis:
+                    print("✅ Analysis completed successfully")
+                    
+                    # Generate trading signals if analysis is good
+                    signals = bot_instance.get_trading_signals(analysis)
+                    if signals and bot_instance.auto_trade:
+                        print(f"🎯 Trading signal detected: {signals['signal_type']}")
+                        
+                        # Execute trade if conditions are met
+                        result = bot_instance.execute_trade(signals)
+                        if result:
+                            print(f"✅ Trade executed: Order #{result['order_id']}")
+                        else:
+                            print("⚠️  Trade execution failed or skipped")
+                    else:
+                        if not signals:
+                            print("ℹ️  No trading signals generated")
+                        elif not bot_instance.auto_trade:
+                            print("ℹ️  Auto trading disabled - signals not executed")
+                else:
+                    print("⚠️  Analysis failed this cycle")
+                
+                # Monitor existing positions
+                if bot_instance.connected:
+                    print("📊 Monitoring positions...")
+                    positions = bot_instance.monitor_positions()
+                    if positions:
+                        print(f"📈 Currently managing {len(positions)} position(s)")
+                    else:
+                        print("📈 No open positions")
+                else:
+                    print("❌ Cannot monitor positions - MT5 not connected")
+                
+            except Exception as cycle_error:
+                print(f"❌ Error in trading cycle #{cycle_count}: {cycle_error}")
+                import traceback
+                traceback.print_exc()
+                
+                # Continue to next cycle unless it's a critical error
+                if "connection" in str(cycle_error).lower():
+                    print("🔄 Connection issue detected, will attempt reconnection next cycle")
+                else:
+                    print("⚠️  Non-critical error, continuing to next cycle")
             
-            # Wait for next cycle (5 minutes)
-            for _ in range(300):  # 5 minutes = 300 seconds
-                if not bot_running:
-                    break
-                time.sleep(1)
+            # Wait for next cycle (5 minutes) with status updates
+            if bot_running:
+                print(f"⏳ Waiting 5 minutes for next cycle...")
+                for i in range(300):  # 5 minutes = 300 seconds
+                    if not bot_running:
+                        print("🛑 Trading loop stopped by user")
+                        break
+                    
+                    # Show progress every minute
+                    if i > 0 and i % 60 == 0:
+                        minutes_left = (300 - i) // 60
+                        print(f"⏳ {minutes_left} minute(s) remaining until next cycle...")
+                    
+                    time.sleep(1)
     
     except Exception as e:
-        print(f"Error in trading loop: {e}")
+        print(f"❌ Critical error in trading loop: {e}")
+        import traceback
         traceback.print_exc()
     finally:
+        print("🏁 Trading loop ending...")
         bot_running = False
+        
+        # Close all positions if they exist
+        if bot_instance and bot_instance.connected and bot_instance.auto_trade:
+            print("🔒 Auto-closing all positions before stopping...")
+            try:
+                bot_instance.close_all_positions()
+            except Exception as close_error:
+                print(f"⚠️  Error closing positions: {close_error}")
+        
+        print("✅ Trading loop stopped")
 
 if __name__ == '__main__':
     # Create templates directory if it doesn't exist

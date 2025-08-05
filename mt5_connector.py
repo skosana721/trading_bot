@@ -850,6 +850,68 @@ class MT5Connector:
             
             if result.retcode != mt5.TRADE_RETCODE_DONE:
                 print(f"❌ Order failed: {result.retcode} - {result.comment}")
+                
+                # Provide specific guidance for common error codes
+                if result.retcode == 10019:  # No money
+                    print(f"\n💡 ERROR 10019 - NO MONEY:")
+                    print(f"   This means insufficient margin to place the trade.")
+                    print(f"   Possible solutions:")
+                    print(f"   1. Reduce position size")
+                    print(f"   2. Close some existing positions")
+                    print(f"   3. Add more funds to your account")
+                    print(f"   4. Check your leverage settings")
+                    
+                    # Get current account status for debugging
+                    try:
+                        account_info = self.get_account_summary()
+                        if account_info:
+                            print(f"\n📊 Current Account Status:")
+                            print(f"   Balance: ${account_info.get('balance', 0):,.2f}")
+                            print(f"   Equity: ${account_info.get('equity', 0):,.2f}")
+                            print(f"   Used Margin: ${account_info.get('margin', 0):,.2f}")
+                            print(f"   Free Margin: ${account_info.get('margin_free', 0):,.2f}")
+                            print(f"   Margin Level: {account_info.get('margin_level', 0):,.2f}%")
+                    except:
+                        pass
+                
+                elif result.retcode == 10018:  # Market closed
+                    print(f"\n💡 ERROR 10018 - MARKET CLOSED:")
+                    print(f"   The market is currently closed for this symbol.")
+                    print(f"   Try again during market hours.")
+                
+                elif result.retcode == 10004:  # Requote
+                    print(f"\n💡 ERROR 10004 - REQUOTE:")
+                    print(f"   Price has changed. Try placing the order again.")
+                
+                elif result.retcode == 10006:  # Request rejected
+                    print(f"\n💡 ERROR 10006 - REQUEST REJECTED:")
+                    print(f"   Order was rejected by the broker.")
+                    print(f"   Check your trading permissions and account status.")
+                
+                elif result.retcode == 10014:  # Invalid volume
+                    print(f"\n💡 ERROR 10014 - INVALID VOLUME:")
+                    print(f"   The volume ({volume}) is not valid for this symbol.")
+                    print(f"   Possible causes:")
+                    print(f"   1. Volume is below minimum allowed")
+                    print(f"   2. Volume is above maximum allowed")
+                    print(f"   3. Volume step is incorrect")
+                    print(f"   4. Volume format is invalid")
+                    
+                    # Get symbol info for debugging
+                    try:
+                        symbol_info = self.get_symbol_info(symbol)
+                        if symbol_info:
+                            print(f"\n📊 Symbol Volume Requirements:")
+                            print(f"   Min Volume: {symbol_info.get('volume_min', 'N/A')}")
+                            print(f"   Max Volume: {symbol_info.get('volume_max', 'N/A')}")
+                            print(f"   Volume Step: {symbol_info.get('volume_step', 'N/A')}")
+                            print(f"   Requested Volume: {volume}")
+                    except:
+                        pass
+                
+                else:
+                    print(f"\n💡 For more information about error {result.retcode}, check MT5 documentation.")
+                
                 return None
             
             print(f"✅ Order placed successfully")

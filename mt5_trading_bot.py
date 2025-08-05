@@ -73,7 +73,6 @@ class MT5TradingBot:
         self.auto_trade = auto_trade
         self.use_ml = use_ml and ML_AVAILABLE
         self.use_smc = use_smc and SMC_AVAILABLE
-        self.account_size = None  # Will be set from MT5 account info
         
         # ML Components
         self.ml_model = None
@@ -123,17 +122,15 @@ class MT5TradingBot:
             self.connected = self.mt5_connector.connect()
             if self.connected:
                 print("✅ MT5 connection established")
-                # Get account size from MT5
+                # Verify account connection by getting account info
                 account_info = self.mt5_connector.get_account_summary()
                 if account_info:
-                    self.account_size = account_info.get('balance', 0)
-                    print(f"💰 Account Balance: ${self.account_size:,.2f}")
+                    balance = account_info.get('balance', 0)
+                    print(f"💰 Account Balance: ${balance:,.2f}")
                 else:
-                    print("⚠️  Could not get account balance, using default")
-                    self.account_size = 10000  # Fallback default
+                    print("⚠️  Could not get account balance")
             else:
                 print("❌ MT5 connection failed")
-                self.account_size = 10000  # Fallback default
         return self.connected
     
     def debug_data_structure(self, data):
@@ -200,8 +197,10 @@ class MT5TradingBot:
         
         # Fallback to yfinance
         try:
+            # Use a default account size for yfinance fallback (not used for MT5 trading)
+            default_account_size = 10000
             self.analysis_bot = TradingBot(self.symbol, self.timeframe, "forex", 
-                                         self.account_size or 10000, self.risk_per_trade)
+                                         default_account_size, self.risk_per_trade)
             if self.analysis_bot.fetch_data():
                 data = self.analysis_bot.data
                 print("✅ Using yfinance data")
@@ -777,8 +776,31 @@ class MT5TradingBot:
         price_reward = abs(target_price - entry_price)
         risk_reward_ratio = price_reward / price_risk if price_risk > 0 else 0
         
+        # Get current account balance from MT5
+        current_balance = None
+        if self.connected and self.mt5_connector:
+            try:
+                account_info = self.mt5_connector.get_account_summary()
+                if account_info:
+                    current_balance = account_info.get('balance', 0)
+                    print(f"💰 Current Account Balance: ${current_balance:,.2f}")
+                else:
+                    print(f"❌ Could not get account balance from MT5")
+                    return None
+            except Exception as e:
+                print(f"❌ Error getting account balance: {e}")
+                return None
+        else:
+            print(f"❌ Not connected to MT5 - cannot get account balance")
+            return None
+        
+        if current_balance is None or current_balance <= 0:
+            print(f"❌ Invalid account balance: ${current_balance}")
+            return None
+        
         # Calculate position size based on risk (for forex)
-        risk_per_trade_amount = self.account_size * self.risk_per_trade
+        risk_per_trade_amount = current_balance * self.risk_per_trade
+        print(f"💸 Risk per trade amount: ${risk_per_trade_amount:,.2f} ({self.risk_per_trade * 100}% of balance)")
         
         # For forex, position size = risk amount / (stop loss distance in pips * pip value)
         # Pip value for EURUSD = 0.0001, so 1 pip = $1 per 10,000 units (0.1 lots)
@@ -786,14 +808,44 @@ class MT5TradingBot:
         stop_loss_pips = price_risk / pip_size
         target_pips = price_reward / pip_size
         
+        print(f"📊 Stop Loss: {stop_loss_pips:.1f} pips, Target: {target_pips:.1f} pips")
+        
         if stop_loss_pips > 0:
             # Position size in lots (1 lot = 100,000 units for major pairs)
+            # For EURUSD: 1 pip = $10 per lot
             position_size = risk_per_trade_amount / (stop_loss_pips * 10)  # $10 per pip per lot for EURUSD
-            # Cap position size to reasonable limits
-            position_size = min(position_size, 10.0)  # Max 10 lots
-            position_size = max(position_size, 0.01)  # Min 0.01 lots
+            print(f"📈 Calculated position size: {position_size:.4f} lots")
+            
+            # Get symbol info for volume validation
+            symbol_info = None
+            if self.connected and self.mt5_connector:
+                symbol_info = self.mt5_connector.get_symbol_info(self.symbol)
+            
+            # Validate and adjust position size based on broker requirements
+            if symbol_info:
+                min_volume = symbol_info.get('volume_min', 0.01)
+                max_volume = symbol_info.get('volume_max', 100.0)
+                volume_step = symbol_info.get('volume_step', 0.01)
+                
+                print(f"📊 Broker volume limits: Min={min_volume}, Max={max_volume}, Step={volume_step}")
+                
+                # Ensure position size is within broker limits
+                position_size = max(position_size, min_volume)
+                position_size = min(position_size, max_volume)
+                
+                # Round to nearest step
+                position_size = round(position_size / volume_step) * volume_step
+                
+                print(f"📈 Adjusted position size: {position_size:.4f} lots")
+            else:
+                # Fallback limits if symbol info not available
+                position_size = min(position_size, 10.0)  # Max 10 lots
+                position_size = max(position_size, 0.01)  # Min 0.01 lots
+                position_size = round(position_size / 0.01) * 0.01  # Round to 0.01
+                print(f"📈 Final position size (fallback): {position_size:.4f} lots")
         else:
             position_size = 0.01  # Default minimum
+            print(f"📈 Using minimum position size: {position_size:.4f} lots")
         
         # Calculate actual dollar amounts
         risk_amount = position_size * stop_loss_pips * 10  # $10 per pip per lot
@@ -885,6 +937,41 @@ class MT5TradingBot:
             return None
         
         try:
+            # Get current account balance and margin information
+            print(f"\n💰 CHECKING ACCOUNT STATUS FOR TRADE EXECUTION")
+            account_info = self.mt5_connector.get_account_summary()
+            if not account_info:
+                print("❌ Could not get account information")
+                return None
+            
+            current_balance = account_info.get('balance', 0)
+            current_equity = account_info.get('equity', 0)
+            current_margin = account_info.get('margin', 0)
+            free_margin = account_info.get('margin_free', 0)
+            
+            print(f"💰 Account Balance: ${current_balance:,.2f}")
+            print(f"💰 Account Equity: ${current_equity:,.2f}")
+            print(f"💰 Used Margin: ${current_margin:,.2f}")
+            print(f"💰 Free Margin: ${free_margin:,.2f}")
+            
+            # Check if we have sufficient free margin
+            required_margin = signals['position_size'] * 1000  # Rough estimate: 1 lot = $1000 margin
+            if free_margin < required_margin:
+                print(f"❌ Insufficient free margin: ${free_margin:,.2f} available, ${required_margin:,.2f} required")
+                print(f"   Position size: {signals['position_size']:.4f} lots")
+                
+                # Try to reduce position size to fit available margin
+                max_position_size = free_margin / 1000  # Maximum position size based on available margin
+                if max_position_size >= 0.01:  # Minimum position size
+                    print(f"🔄 Attempting to reduce position size to {max_position_size:.4f} lots")
+                    signals['position_size'] = max_position_size
+                    signals['risk_amount'] = signals['risk_amount'] * (max_position_size / signals['position_size'])
+                    signals['potential_profit'] = signals['potential_profit'] * (max_position_size / signals['position_size'])
+                    print(f"✅ Adjusted position size to {max_position_size:.4f} lots")
+                else:
+                    print(f"❌ Cannot place trade - insufficient margin even for minimum position size")
+                    return None
+            
             # Check current positions for this symbol
             positions = self.mt5_connector.get_positions()
             current_positions = []
@@ -892,6 +979,8 @@ class MT5TradingBot:
                 for pos in positions:
                     if pos['symbol'] == self.symbol:
                         current_positions.append(pos)
+            
+            print(f"📊 Current positions for {self.symbol}: {len(current_positions)}")
             
             # Check if we have too many positions (limit to 3 concurrent trades per symbol)
             max_positions = 3
@@ -912,9 +1001,12 @@ class MT5TradingBot:
                 print(f"⚠️  Maximum {signal_type} positions ({max_same_direction}) reached for {self.symbol}")
                 return None
             
-            # Calculate position size based on remaining risk allocation
+            # Calculate position size based on remaining risk allocation using current balance
             total_risk_used = sum([pos.get('risk_amount', 0) for pos in current_positions])
-            available_risk = (self.account_size or 10000) * self.risk_per_trade - total_risk_used
+            available_risk = current_balance * self.risk_per_trade - total_risk_used
+            
+            print(f"💸 Total risk used: ${total_risk_used:,.2f}")
+            print(f"💸 Available risk: ${available_risk:,.2f}")
             
             if available_risk <= 0:
                 print(f"⚠️  No available risk allocation for {self.symbol}")
@@ -928,6 +1020,26 @@ class MT5TradingBot:
                 adjusted_signals['risk_amount'] = available_risk
                 adjusted_signals['potential_profit'] = signals['potential_profit'] * risk_ratio
                 print(f"📊 Adjusted position size due to risk allocation: {risk_ratio:.2f}")
+            
+            # Final volume validation before placing order
+            if self.connected and self.mt5_connector:
+                symbol_info = self.mt5_connector.get_symbol_info(self.symbol)
+                if symbol_info:
+                    min_volume = symbol_info.get('volume_min', 0.01)
+                    max_volume = symbol_info.get('volume_max', 100.0)
+                    volume_step = symbol_info.get('volume_step', 0.01)
+                    
+                    # Ensure final position size is valid
+                    if adjusted_signals['position_size'] < min_volume:
+                        print(f"❌ Position size {adjusted_signals['position_size']:.4f} is below minimum {min_volume}")
+                        return None
+                    elif adjusted_signals['position_size'] > max_volume:
+                        print(f"❌ Position size {adjusted_signals['position_size']:.4f} exceeds maximum {max_volume}")
+                        return None
+                    
+                    # Round to nearest step
+                    adjusted_signals['position_size'] = round(adjusted_signals['position_size'] / volume_step) * volume_step
+                    print(f"📊 Final validated position size: {adjusted_signals['position_size']:.4f} lots")
             
             # Place the order
             result = self.mt5_connector.place_order(
@@ -1159,8 +1271,10 @@ class MT5TradingBot:
         
         # Perform traditional analysis
         if self.analysis_bot is None:
+            # Use a default account size for yfinance fallback (not used for MT5 trading)
+            default_account_size = 10000
             self.analysis_bot = TradingBot(self.symbol, self.timeframe, "forex", 
-                                         self.account_size or 10000, self.risk_per_trade)
+                                         default_account_size, self.risk_per_trade)
         
         self.analysis_bot.data = data.copy()
         analysis = self.analysis_bot.analyze_market_trend()
@@ -1308,7 +1422,7 @@ class MT5TradingBot:
         summary = {
             'symbol': self.symbol,
             'timeframe': self.timeframe,
-            'account_size': self.account_size,
+            'account_size': None,  # No longer used - balance fetched from MT5
             'risk_per_trade': self.risk_per_trade,
             'total_trades': len(self.trade_history),
             'open_positions': 0,
@@ -1570,7 +1684,7 @@ class MT5TradingBot:
             'stop_loss': None,
             'target': None,
             'position_size': None,
-            'risk_amount': self.account_size * self.risk_per_trade if self.account_size else 0,
+            'risk_amount': 0,  # Will be calculated from current balance when needed
             'potential_profit': 0,
             'timeframe': self.timeframe,
             'analysis': traditional_signals,
