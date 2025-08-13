@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dynamic Trading Bot - XM Integration</title>
+    <title>Automated Trading Bot - MT5 Integration</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -22,7 +22,7 @@
         }
 
         .container {
-            max-width: 1400px;
+            max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
         }
@@ -44,23 +44,17 @@
             opacity: 0.9;
         }
 
-        .main-content {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 30px;
-            margin-bottom: 30px;
-        }
-
         .card {
             background: white;
             border-radius: 15px;
             padding: 25px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
             transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
 
         .card:hover {
-            transform: translateY(-5px);
+            transform: translateY(-2px);
             box-shadow: 0 15px 40px rgba(0,0,0,0.15);
         }
 
@@ -98,14 +92,6 @@
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
 
-        .border-purple {
-            border-color: #6f42c1 !important;
-        }
-
-        .bg-purple {
-            background-color: #6f42c1 !important;
-        }
-
         .btn {
             padding: 12px 24px;
             border: none;
@@ -116,6 +102,8 @@
             transition: all 0.3s ease;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            margin-right: 10px;
+            margin-bottom: 10px;
         }
 
         .btn-primary {
@@ -157,18 +145,6 @@
              transform: translateY(-2px);
              box-shadow: 0 5px 15px rgba(237, 137, 54, 0.4);
          }
-         
-         .btn-outline {
-             background: transparent;
-             border: 2px solid #667eea;
-             color: #667eea;
-         }
-         
-         .btn-outline:hover {
-             background: #667eea;
-             color: white;
-             transform: translateY(-1px);
-         }
 
         .alert {
             padding: 15px;
@@ -201,26 +177,6 @@
             border: 1px solid #bee5eb;
         }
 
-        .loading {
-            opacity: 0.6;
-            pointer-events: none;
-        }
-
-        .loading-spinner {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #667eea;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
         .status-indicator {
             display: inline-block;
             width: 12px;
@@ -237,8 +193,8 @@
             background-color: #dc3545;
         }
 
-        .status-connecting {
-            background-color: #ffc107;
+        .status-running {
+            background-color: #17a2b8;
             animation: pulse 2s infinite;
         }
 
@@ -248,154 +204,29 @@
             100% { opacity: 1; }
         }
 
-        .metric-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 20px;
-            border-radius: 10px;
-            text-align: center;
-            margin: 10px 0;
-        }
-
-        .metric-value {
-            font-size: 2rem;
-            font-weight: bold;
-            margin: 10px 0;
-        }
-
-        .metric-label {
-            font-size: 0.9rem;
-            opacity: 0.9;
-        }
-
-        .tooltip {
-            position: relative;
-            display: inline-block;
-        }
-
-        .tooltip .tooltiptext {
-            visibility: hidden;
-            width: 200px;
-            background-color: #555;
-            color: #fff;
-            text-align: center;
-            border-radius: 6px;
-            padding: 5px;
-            position: absolute;
-            z-index: 1;
-            bottom: 125%;
-            left: 50%;
-            margin-left: -100px;
-            opacity: 0;
-            transition: opacity 0.3s;
-        }
-
-        .tooltip:hover .tooltiptext {
-            visibility: visible;
-            opacity: 1;
-        }
-
-        .retry-button {
-            background: #667eea;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-left: 10px;
-        }
-
-        .retry-button:hover {
-            background: #5a6fd8;
-        }
-
-        .error-details {
-            background: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-            padding: 10px;
-            margin-top: 10px;
-            font-family: monospace;
-            font-size: 0.8rem;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-
-        .analysis-results {
-            background: #f7fafc;
-            border-radius: 8px;
-            padding: 20px;
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
             margin-top: 20px;
         }
 
-        .analysis-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 0;
-            border-bottom: 1px solid #e2e8f0;
+        .status-item {
+            background: #f7fafc;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
         }
 
-        .analysis-item:last-child {
-            border-bottom: none;
-        }
-
-        .analysis-label {
+        .status-label {
             font-weight: 600;
             color: #4a5568;
+            margin-bottom: 5px;
         }
 
-        .analysis-value {
-            font-weight: 500;
+        .status-value {
+            font-size: 1.1rem;
             color: #2d3748;
-        }
-
-        .entry-conditions {
-            background: #f0fff4;
-            border-radius: 8px;
-            padding: 15px;
-            margin-top: 10px;
-        }
-
-        .condition-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 8px 0;
-            color: #22543d;
-            font-weight: 500;
-        }
-
-        .trading-rules {
-            background: #f7fafc;
-            border-radius: 8px;
-            padding: 15px;
-            margin-top: 10px;
-        }
-
-        .rule-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 8px 0;
-            color: #4a5568;
-            font-weight: 500;
-        }
-
-        .continuation-patterns {
-            background: #ebf8ff;
-            border-radius: 8px;
-            padding: 15px;
-            margin-top: 10px;
-        }
-
-        .pattern-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 8px 0;
-            color: #2a4365;
-            font-weight: 500;
         }
 
         .positions-table {
@@ -427,124 +258,156 @@
             font-weight: 600;
         }
 
-        .grid-2 {
+        .table-responsive {
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        @media (max-width: 640px) {
+            .positions-table thead {
+                display: none;
+            }
+            .positions-table,
+            .positions-table tbody,
+            .positions-table tr,
+            .positions-table td {
+                display: block;
+                width: 100%;
+            }
+            .positions-table tr {
+                margin-bottom: 12px;
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+                background: #ffffff;
+            }
+            .positions-table td {
+                border-bottom: none;
+                padding: 10px 12px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            .positions-table td::before {
+                content: attr(data-label);
+                font-weight: 600;
+                color: #4a5568;
+                margin-right: 12px;
+            }
+        }
+
+        .trading-bots-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-        }
-
-        .full-width {
-            grid-column: 1 / -1;
-        }
-
-        .checkbox-group {
-            display: flex;
-            align-items: center;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
             gap: 10px;
+            margin-top: 15px;
         }
 
-        .checkbox-group input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
-        }
-
-        .server-select {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 15px;
-        }
-
-        .server-option {
-            flex: 1;
-            padding: 10px;
-            border: 2px solid #e2e8f0;
-            border-radius: 8px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .server-option:hover {
-            border-color: #667eea;
+        .bot-item {
             background: #f7fafc;
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+            border: 1px solid #e2e8f0;
         }
 
-        .server-option.selected {
-            border-color: #667eea;
-            background: #667eea;
-            color: white;
+        .bot-symbol {
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        .bot-status {
+            font-size: 0.8rem;
+            color: #718096;
+            margin-top: 5px;
         }
 
         .symbol-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
             gap: 10px;
-            max-height: 200px;
-            overflow-y: auto;
             border: 2px solid #e2e8f0;
             border-radius: 8px;
-            padding: 15px;
+            padding: 12px;
+            max-height: 200px;
+            overflow-y: auto;
         }
-
         .symbol-option {
             padding: 8px 12px;
             border: 1px solid #e2e8f0;
             border-radius: 6px;
             text-align: center;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
             font-size: 12px;
-            font-weight: 500;
+            font-weight: 600;
+            color: #4a5568;
+            background: #fff;
+        }
+        .symbol-option:hover { border-color: #667eea; background: #f7fafc; }
+        .symbol-option.selected { border-color: #667eea; background: #667eea; color: #fff; }
+
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
         }
 
-        .symbol-option:hover {
-            border-color: #667eea;
-            background: #f7fafc;
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
         }
 
-        .symbol-option.selected {
-            border-color: #667eea;
-            background: #667eea;
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .automation-info {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
         }
 
-        .timeframe-grid {
+        .automation-info h3 {
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+        }
+
+        .automation-features {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-            gap: 10px;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
         }
 
-        .timeframe-option {
-            padding: 10px;
-            border: 2px solid #e2e8f0;
+        .feature-item {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
             border-radius: 8px;
             text-align: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
         }
 
-        .timeframe-option:hover {
-            border-color: #667eea;
-            background: #f7fafc;
-        }
-
-        .timeframe-option.selected {
-            border-color: #667eea;
-            background: #667eea;
-            color: white;
+        .feature-icon {
+            font-size: 2rem;
+            margin-bottom: 10px;
         }
 
         @media (max-width: 768px) {
-            .main-content {
+            .status-grid {
                 grid-template-columns: 1fr;
             }
             
-            .grid-2 {
-                grid-template-columns: 1fr;
+            .trading-bots-grid {
+                grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
             }
             
-            .symbol-grid {
-                grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            .automation-features {
+                grid-template-columns: 1fr;
             }
         }
     </style>
@@ -554,48 +417,74 @@
     <div id="app">
         <div class="container">
                          <div class="header">
-                 <h1><i class="fas fa-chart-line"></i> Dynamic Trading Bot</h1>
-                 <p>XM Integration with Machine Learning Analysis & Multi-Trade Support</p>
-                 <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px; margin-top: 10px;">
-                     <small>
-                         <i class="fas fa-info-circle"></i> 
-                         <strong>Multi-Trade Features:</strong> 
-                         Up to 3 concurrent positions per symbol, 
-                         Risk-based position sizing, 
-                         Individual position management
-                     </small>
+                <h1><i class="fas fa-robot"></i> Automated Trading Bot</h1>
+                <p>Fully Automated MT5 Trading with Multi-Symbol Analysis</p>
+            </div>
+
+            <!-- Automation Info -->
+            <div class="automation-info">
+                <h3><i class="fas fa-info-circle"></i> Automation Features</h3>
+                <div class="automation-features">
+                    <div class="feature-item">
+                        <div class="feature-icon"><i class="fas fa-chart-line"></i></div>
+                        <div>
+                            <strong>Up to 5 Symbols</strong><br>
+                            <span v-if="selectedSymbols && selectedSymbols.length">
+                                Selected: {{ selectedSymbols.join(', ') }}
+                            </span>
+                            <span v-else>
+                                Choose up to 5 symbols in the form below
+                            </span>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon"><i class="fas fa-clock"></i></div>
+                        <div><strong>Multi-Timeframe</strong><br>5m, 15m, 1h Analysis</div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon"><i class="fas fa-brain"></i></div>
+                        <div><strong>AI-Powered</strong><br>Machine Learning & SMC Analysis</div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon"><i class="fas fa-shield-alt"></i></div>
+                        <div><strong>Risk Management</strong><br>Automatic Position Sizing & Stop Loss</div>
+                    </div>
                  </div>
              </div>
 
             <!-- Connection Status -->
-            <div class="card" style="margin-bottom: 20px;">
+            <div class="card">
                 <h2><i class="fas fa-plug"></i> Connection Status</h2>
-                <div class="analysis-item">
-                    <span class="analysis-label">MT5 Connection:</span>
-                    <span class="analysis-value">
+                <div class="status-grid">
+                    <div class="status-item">
+                        <div class="status-label">MT5 Connection</div>
+                        <div class="status-value">
                         <span :class="['status-indicator', status.connected ? 'status-connected' : 'status-disconnected']"></span>
                         <span v-text="status.connected ? 'Connected' : 'Disconnected'"></span>
-                    </span>
                 </div>
-                <div class="analysis-item" v-if="status.connected">
-                    <span class="analysis-label">Account Balance:</span>
-                    <span class="analysis-value">$<span v-text="status.account_info ? status.account_info.balance.toFixed(2) : 'N/A'"></span></span>
                 </div>
-                <div class="analysis-item">
-                    <span class="analysis-label">Trading Status:</span>
-                    <span class="analysis-value">
+                    <div class="status-item">
+                        <div class="status-label">Automated Trading</div>
+                        <div class="status-value">
                         <span :class="['status-indicator', status.running ? 'status-running' : 'status-disconnected']"></span>
                         <span v-text="status.running ? 'Running' : 'Stopped'"></span>
-                    </span>
+                        </div>
+                    </div>
+                    <div class="status-item" v-if="status.account_info">
+                        <div class="status-label">Account Balance</div>
+                        <div class="status-value">$<span v-text="status.account_info.balance.toFixed(2)"></span></div>
+                    </div>
+                    <div class="status-item" v-if="status.account_info">
+                        <div class="status-label">Account Equity</div>
+                        <div class="status-value">$<span v-text="status.account_info.equity.toFixed(2)"></span></div>
+                    </div>
                 </div>
             </div>
 
-            <div class="main-content">
-                <!-- XM Account Configuration -->
-                <div class="card">
-                    <h2><i class="fas fa-user-cog"></i> XM Account Configuration</h2>
-                    
-                    <div v-if="!status.connected">
+            <!-- MT5 Connection -->
+            <div class="card" v-if="!status.connected">
+                <h2><i class="fas fa-user-cog"></i> Connect to MT5</h2>
+                
                         <div class="form-group">
                             <label>Account Number:</label>
                             <input type="text" v-model="config.account_number" class="form-control" placeholder="Enter XM account number">
@@ -610,553 +499,75 @@
                             <label>Server:</label>
                             <input type="text" v-model="config.server" class="form-control" placeholder="Enter XM server (e.g., XMGlobal-Demo, XMGlobal-Live)">
                             <small style="color: #666; margin-top: 5px; display: block;">
-                                Common servers: XMGlobal-Demo (Demo), XMGlobal-Live (Live), or your custom server
+                                Common servers: XMGlobal-Demo (Demo), XMGlobal-Live (Live)
                             </small>
-                            <div style="margin-top: 10px;">
-                                <button type="button" @click="config.server = 'XMGlobal-Demo'" class="btn btn-outline" style="margin-right: 10px; padding: 5px 10px; font-size: 12px;">
-                                    Demo Server
-                                </button>
-                                <button type="button" @click="config.server = 'XMGlobal-Live'" class="btn btn-outline" style="padding: 5px 10px; font-size: 12px;">
-                                    Live Server
-                                </button>
-                            </div>
                         </div>
                         
+                    
+                        
+                        
                         <button @click="connectMT5" class="btn btn-primary" :disabled="connecting">
-                            <span v-if="connecting" class="loading"></span>
+                    <span v-if="connecting" class="loading-spinner"></span>
                             <span v-text="connecting ? 'Connecting...' : 'Connect to MT5'"></span>
                         </button>
                     </div>
                     
-                    <div v-else>
-                        <div class="alert alert-success">
-                            <i class="fas fa-check-circle"></i>
-                            Successfully connected to XM account!
-                        </div>
-                        <button @click="disconnectMT5" class="btn btn-danger">
-                            <i class="fas fa-sign-out-alt"></i> Disconnect
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Trading Configuration -->
-                <div class="card">
-                    <h2><i class="fas fa-cogs"></i> Trading Configuration</h2>
+            <!-- Automated Trading Controls -->
+            <div class="card" v-if="status.connected">
+                <h2><i class="fas fa-cogs"></i> Automated Trading Controls</h2>
                     
-                    <div class="form-group">
-                        <label>Symbol:</label>
+                <div v-if="!status.running">
+                    <div class="form-group" v-if="!starting">
+                        <label>Select Symbols (max 5):</label>
                         <div class="symbol-grid">
-                            <div v-for="symbol in availableSymbols" 
-                                 :key="symbol"
-                                 class="symbol-option"
-                                 :class="{ selected: config.symbol === symbol }"
-                                 @click="config.symbol = symbol">
+                            <div v-for="symbol in availableSymbols" :key="symbol" class="symbol-option"
+                                :class="{ selected: selectedSymbols.includes(symbol) }"
+                                @click="toggleSymbol(symbol)">
                                 <span v-text="symbol"></span>
                             </div>
                         </div>
+                        <small style="color:#666; display:block; margin-top:6px;">Selected: <strong>{{ selectedSymbols.join(', ') || 'None' }}</strong></strong></small>
                     </div>
-                    
-                    <div class="form-group">
-                        <label>Timeframe:</label>
-                        <div class="timeframe-grid">
-                            <div v-for="tf in availableTimeframes" 
-                                 :key="tf.value"
-                                 class="timeframe-option"
-                                 :class="{ selected: config.timeframe === tf.value }"
-                                 @click="config.timeframe = tf.value">
-                                <span v-text="tf.label"></span>
+                    <div class="form-group" v-if="!starting" style="max-width: 340px;">
+                        <label>Risk Per Trade (%)</label>
+                        <input type="number" class="form-control" v-model.number="riskPerTradeInput" min="0.1" max="10" step="0.1" placeholder="e.g., 2 for 2%">
+                        <small style="color:#666; display:block; margin-top:6px;">Allowed range: 0.1% - 10%</small>
                             </div>
-                        </div>
-                    </div>
+                    <p style="margin-bottom: 20px; color: #666;">
+                        <i class="fas fa-info-circle"></i>
+                        The bot will automatically analyze 5 symbols (EURUSD, GBPUSD, USDJPY, USDCHF, AUDUSD) 
+                        across multiple timeframes and execute trades when high-confidence signals are detected.
+                    </p>
                     
-                    <div class="form-group">
-                        <label>Risk Per Trade (%):</label>
-                        <input type="number" v-model="config.risk_per_trade" class="form-control" min="0.1" max="10" step="0.1">
-                    </div>
-                    
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="auto-trade" v-model="config.auto_trade">
-                        <label for="auto-trade">Enable Auto Trading</label>
-                    </div>
-                    
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="use-ml" v-model="config.use_ml">
-                        <label for="use-ml">Use Machine Learning</label>
-                    </div>
-                    
-                    <div style="margin-top: 20px;">
-                        <button @click="analyzeMarket" class="btn btn-warning" :disabled="analyzing || !status.connected" style="margin-right: 10px;">
-                            <span v-if="analyzing" class="loading"></span>
-                            <span v-text="analyzing ? 'Analyzing...' : 'Analyze Market'"></span>
+                    <button @click="startAutomatedTrading" class="btn btn-success" :disabled="starting">
+                        <i class="fas fa-play"></i> Start Automated Trading
                         </button>
-                        
-                        <button @click="analyzeSMC" class="btn btn-info" :disabled="analyzing || !status.connected" style="margin-right: 10px;">
-                            <i class="fas fa-brain"></i> Analyze SMC
-                        </button>
-                        
-                        <button @click="getCombinedAnalysis" class="btn btn-primary" :disabled="analyzing || !status.connected" style="margin-right: 10px;">
-                            <i class="fas fa-chart-line"></i> Combined Analysis
-                        </button>
-                        
-                        <button v-if="!status.running" @click="startTrading" class="btn btn-success" :disabled="!analysisResults">
-                            <i class="fas fa-play"></i> Start Trading
-                        </button>
-                        
-                        <button v-else @click="stopTrading" class="btn btn-danger">
-                            <i class="fas fa-stop"></i> Stop Trading
-                        </button>
-                    </div>
-                </div>
             </div>
 
-            <!-- Analysis Results -->
-            <div class="card" v-if="analysisResults">
-                <h2><i class="fas fa-chart-bar"></i> Smart Money Concepts Analysis</h2>
-                
-                <!-- Basic Analysis Info -->
-                <div class="analysis-results">
-                    <div class="analysis-item">
-                        <span class="analysis-label">Symbol:</span>
-                        <span class="analysis-value"><strong><span v-text="analysisResults.symbol || config.symbol"></span></strong></span>
-                    </div>
-                    <div class="analysis-item">
-                        <span class="analysis-label">Timeframe:</span>
-                        <span class="analysis-value"><strong><span v-text="analysisResults.timeframe || config.timeframe"></span></strong></span>
-                    </div>
-                    <div class="analysis-item">
-                        <span class="analysis-label">Trend Direction:</span>
-                        <span class="analysis-value">
-                            <i v-if="analysisResults.analysis && analysisResults.analysis.trend_direction === 'UPTREND'" class="fas fa-arrow-up text-success"></i>
-                            <i v-else-if="analysisResults.analysis && analysisResults.analysis.trend_direction === 'DOWNTREND'" class="fas fa-arrow-down text-danger"></i>
-                            <i v-else class="fas fa-arrows-left-right text-warning"></i>
-                            <strong><span v-text="analysisResults.analysis ? analysisResults.analysis.trend_direction || 'SIDEWAYS' : 'N/A'"></span></strong>
-                        </span>
-                    </div>
-                    <div class="analysis-item">
-                        <span class="analysis-label">Overall Strength:</span>
-                        <span class="analysis-value">
-                            <strong><span v-text="analysisResults.analysis && analysisResults.analysis.overall_strength ? analysisResults.analysis.overall_strength.toFixed(1) : 'N/A'"></span>/100</strong>
-                        </span>
-                    </div>
-                    <div class="analysis-item" v-if="analysisResults.analysis && analysisResults.analysis.smc_bias">
-                        <span class="analysis-label">SMC Bias:</span>
-                        <span class="analysis-value">
-                            <i v-if="analysisResults.analysis.smc_bias === 'BULLISH'" class="fas fa-bull text-success"></i>
-                            <i v-else-if="analysisResults.analysis.smc_bias === 'BEARISH'" class="fas fa-bear text-danger"></i>
-                            <i v-else class="fas fa-balance-scale text-warning"></i>
-                            <strong><span v-text="analysisResults.analysis.smc_bias"></span></strong>
-                        </span>
-                    </div>
-                    <div class="analysis-item" v-if="analysisResults.analysis && analysisResults.analysis.smc_score">
-                        <span class="analysis-label">SMC Score:</span>
-                        <span class="analysis-value">
-                            <strong><span v-text="analysisResults.analysis.smc_score.toFixed(1)"></span>/100</strong>
-                        </span>
-                    </div>
-                </div>
-
-                <!-- Smart Money Concepts Details -->
-                <div v-if="analysisResults.smc" style="margin-top: 20px;">
-                    <h3><i class="fas fa-brain"></i> Smart Money Concepts Analysis</h3>
-                    <div class="smc-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;">
-                        
-                        <!-- Order Blocks -->
-                        <div class="smc-item" style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #007bff;">
-                            <h4 style="margin: 0 0 10px 0; color: #007bff;"><i class="fas fa-cube"></i> Order Blocks</h4>
-                            <div v-if="analysisResults.smc.order_blocks && typeof analysisResults.smc.order_blocks === 'object'">
-                                <div><strong>Total:</strong> <span v-text="analysisResults.smc.order_blocks.total || 0"></span></div>
-                                <div><strong>Bullish:</strong> <span v-text="analysisResults.smc.order_blocks.bullish || 0"></span></div>
-                                <div><strong>Bearish:</strong> <span v-text="analysisResults.smc.order_blocks.bearish || 0"></span></div>
-                            </div>
                             <div v-else>
-                                <div><strong>Found:</strong> <span v-text="analysisResults.smc.order_blocks || 0"></span></div>
+                    <div class="alert alert-info">
+                        <i class="fas fa-robot"></i>
+                        Automated trading is running! The bot is analyzing markets and executing trades automatically.
+                        </div>
+
+                    <button @click="stopAutomatedTrading" class="btn btn-danger">
+                        <i class="fas fa-stop"></i> Stop Automated Trading
+                    </button>
                             </div>
                         </div>
 
-                        <!-- Fair Value Gaps -->
-                        <div class="smc-item" style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #28a745;">
-                            <h4 style="margin: 0 0 10px 0; color: #28a745;"><i class="fas fa-gap"></i> Fair Value Gaps</h4>
-                            <div v-if="analysisResults.smc.fair_value_gaps && typeof analysisResults.smc.fair_value_gaps === 'object'">
-                                <div><strong>Total:</strong> <span v-text="analysisResults.smc.fair_value_gaps.total || 0"></span></div>
-                                <div><strong>Bullish:</strong> <span v-text="analysisResults.smc.fair_value_gaps.bullish || 0"></span></div>
-                                <div><strong>Bearish:</strong> <span v-text="analysisResults.smc.fair_value_gaps.bearish || 0"></span></div>
-                            </div>
-                            <div v-else>
-                                <div><strong>Found:</strong> <span v-text="analysisResults.smc.fair_value_gaps || 0"></span></div>
-                            </div>
+            <!-- Trading Bots Status -->
+            <div class="card" v-if="status.connected && status.trading_bots && Object.keys(status.trading_bots).length > 0">
+                <h2><i class="fas fa-robot"></i> Trading Bots Status</h2>
+                <div class="trading-bots-grid">
+                    <div v-for="(bot, symbol) in status.trading_bots" :key="symbol" class="bot-item">
+                        <div class="bot-symbol" v-text="symbol"></div>
+                        <div class="bot-status">
+                            <span :class="['status-indicator', bot.connected ? 'status-connected' : 'status-disconnected']"></span>
+                            <span v-text="bot.connected ? 'Active' : 'Inactive'"></span>
                         </div>
-
-                        <!-- BOS/ChoCH -->
-                        <div class="smc-item" style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107;">
-                            <h4 style="margin: 0 0 10px 0; color: #ffc107;"><i class="fas fa-exchange-alt"></i> Structure Breaks</h4>
-                            <div><strong>BOS/ChoCH:</strong> <span v-text="analysisResults.smc.bos_choch_patterns || 0"></span></div>
-                        </div>
-
-                        <!-- Liquidity Zones -->
-                        <div class="smc-item" style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #6f42c1;">
-                            <h4 style="margin: 0 0 10px 0; color: #6f42c1;"><i class="fas fa-water"></i> Liquidity Zones</h4>
-                            <div v-if="analysisResults.smc.liquidity_zones && typeof analysisResults.smc.liquidity_zones === 'object'">
-                                <div><strong>Total:</strong> <span v-text="analysisResults.smc.liquidity_zones.total || 0"></span></div>
-                                <div><strong>Support:</strong> <span v-text="analysisResults.smc.liquidity_zones.support || 0"></span></div>
-                                <div><strong>Resistance:</strong> <span v-text="analysisResults.smc.liquidity_zones.resistance || 0"></span></div>
-                            </div>
-                            <div v-else>
-                                <div><strong>Found:</strong> <span v-text="analysisResults.smc.liquidity_zones || 0"></span></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Market Structure -->
-                    <div v-if="analysisResults.smc.market_structure" style="margin-top: 20px;">
-                        <h4><i class="fas fa-chart-line"></i> Market Structure</h4>
-                        <div class="analysis-results">
-                            <div class="analysis-item">
-                                <span class="analysis-label">Trend:</span>
-                                <span class="analysis-value"><span v-text="analysisResults.smc.market_structure.trend || 'Unknown'"></span></span>
-                            </div>
-                            <div class="analysis-item">
-                                <span class="analysis-label">Phase:</span>
-                                <span class="analysis-value"><span v-text="analysisResults.smc.market_structure.phase || 'Unknown'"></span></span>
-                            </div>
-                            <div class="analysis-item">
-                                <span class="analysis-label">Volatility:</span>
-                                <span class="analysis-value"><span v-text="analysisResults.smc.market_structure.volatility || 'Unknown'"></span></span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Confidence Breakdown -->
-                    <div v-if="analysisResults.smc.confidence_breakdown" style="margin-top: 20px;">
-                        <h4><i class="fas fa-chart-pie"></i> Confidence Breakdown</h4>
-                        <div class="analysis-results">
-                            <div class="analysis-item">
-                                <span class="analysis-label">Traditional Strength:</span>
-                                <span class="analysis-value"><span v-text="analysisResults.smc.confidence_breakdown.traditional_strength.toFixed(1)"></span>/100</span>
-                            </div>
-                            <div class="analysis-item">
-                                <span class="analysis-label">SMC Score:</span>
-                                <span class="analysis-value"><span v-text="analysisResults.smc.confidence_breakdown.smc_score.toFixed(1)"></span>/100</span>
-                            </div>
-                            <div class="analysis-item">
-                                <span class="analysis-label">Combined Confidence:</span>
-                                <span class="analysis-value"><strong><span v-text="analysisResults.smc.confidence_breakdown.combined_confidence.toFixed(1)"></span>/100</strong></span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Trading Signals -->
-                <div v-if="analysisResults.signals" style="margin-top: 20px;">
-                    <h3><i class="fas fa-signal"></i> Trading Signals</h3>
-                    <div class="signal-box" :style="'background: ' + (analysisResults.signals.signal_type === 'BUY' ? '#d4edda' : analysisResults.signals.signal_type === 'SELL' ? '#f8d7da' : '#fff3cd') + '; padding: 15px; border-radius: 8px; border-left: 4px solid ' + (analysisResults.signals.signal_type === 'BUY' ? '#28a745' : analysisResults.signals.signal_type === 'SELL' ? '#dc3545' : '#ffc107') + ';'">
-                        <div style="display: flex; align-items: center; margin-bottom: 10px;">
-                            <i :class="'fas fa-' + (analysisResults.signals.signal_type === 'BUY' ? 'arrow-up' : analysisResults.signals.signal_type === 'SELL' ? 'arrow-down' : 'pause') + ' ' + (analysisResults.signals.signal_type === 'BUY' ? 'text-success' : analysisResults.signals.signal_type === 'SELL' ? 'text-danger' : 'text-warning')" style="font-size: 24px; margin-right: 10px;"></i>
-                            <h4 style="margin: 0;"><span v-text="analysisResults.signals.signal_type || 'NO SIGNAL'"></span> Signal</h4>
-                            <span style="margin-left: auto; font-weight: bold; font-size: 18px;"><span v-text="analysisResults.signals.signal_confidence || 0"></span>% Confidence</span>
-                        </div>
-                        
-                        <div class="signal-details" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;">
-                            <div><strong>Entry:</strong> <span v-text="analysisResults.signals.entry_price ? analysisResults.signals.entry_price.toFixed(5) : 'N/A'"></span></div>
-                            <div><strong>Stop Loss:</strong> <span v-text="analysisResults.signals.stop_loss ? analysisResults.signals.stop_loss.toFixed(5) : 'N/A'"></span></div>
-                            <div><strong>Target:</strong> <span v-text="analysisResults.signals.target ? analysisResults.signals.target.toFixed(5) : 'N/A'"></span></div>
-                            <div><strong>Risk/Reward:</strong> 1:<span v-text="analysisResults.signals.risk_reward_ratio ? analysisResults.signals.risk_reward_ratio.toFixed(1) : 'N/A'"></span></div>
-                            <div><strong>Position Size:</strong> <span v-text="analysisResults.signals.position_size ? analysisResults.signals.position_size.toFixed(2) : 'N/A'"></span> lots</div>
-                            <div><strong>Risk Amount:</strong> $<span v-text="analysisResults.signals.risk_amount ? analysisResults.signals.risk_amount.toFixed(2) : 'N/A'"></span></div>
-                        </div>
-
-                        <!-- SMC Context -->
-                        <div v-if="analysisResults.signals.smc_context" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #dee2e6;">
-                            <h5><i class="fas fa-brain"></i> SMC Context</h5>
-                            <div style="display: flex; gap: 15px; flex-wrap: wrap;">
-                                <div v-if="analysisResults.signals.smc_context.order_blocks"><strong>Order Blocks:</strong> <span v-text="analysisResults.signals.smc_context.order_blocks"></span></div>
-                                <div v-if="analysisResults.signals.smc_context.fair_value_gaps"><strong>FVGs:</strong> <span v-text="analysisResults.signals.smc_context.fair_value_gaps"></span></div>
-                                <div v-if="analysisResults.signals.smc_context.structure_breaks"><strong>BOS:</strong> <span v-text="analysisResults.signals.smc_context.structure_breaks"></span></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Entry Conditions -->
-                <div v-if="analysisResults.entry_conditions && analysisResults.entry_conditions.length > 0" style="margin-top: 20px;">
-                    <h3><i class="fas fa-list-check"></i> Entry Conditions</h3>
-                    <div class="entry-conditions">
-                        <div v-for="condition in analysisResults.entry_conditions" :key="condition" class="condition-item">
-                            <i class="fas fa-check text-success"></i>
-                            <span v-text="condition"></span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Trading Rules Compliance -->
-                <div v-if="analysisResults.trading_rules_followed" style="margin-top: 20px;">
-                    <h3><i class="fas fa-clipboard-check"></i> Trading Rules Compliance</h3>
-                    <div class="trading-rules">
-                        <div v-for="(status, rule) in analysisResults.trading_rules_followed" :key="rule" class="rule-item">
-                            <i :class="status ? 'fas fa-check text-success' : 'fas fa-times text-danger'"></i>
-                            <span v-text="rule.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())"></span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Trading Signals -->
-                <div v-if="analysisResults.breakout_signals && analysisResults.breakout_signals.entry_signal" style="margin-top: 20px;">
-                    <h3><i class="fas fa-signal"></i> Breakout & Retest Signals</h3>
-                    <div class="analysis-results">
-                        <div class="analysis-item">
-                            <span class="analysis-label">Entry Price:</span>
-                            <span class="analysis-value"><span v-text="analysisResults.breakout_signals.entry_price.toFixed(5)"></span></span>
-                        </div>
-                        <div class="analysis-item">
-                            <span class="analysis-label">Stop Loss:</span>
-                            <span class="analysis-value"><span v-text="analysisResults.breakout_signals.stop_loss.toFixed(5)"></span></span>
-                        </div>
-                        <div class="analysis-item">
-                            <span class="analysis-label">Target:</span>
-                            <span class="analysis-value"><span v-text="analysisResults.breakout_signals.target.toFixed(5)"></span></span>
-                        </div>
-                        <div class="analysis-item">
-                            <span class="analysis-label">Pattern Strength:</span>
-                            <span class="analysis-value"><span v-text="analysisResults.breakout_signals.pattern_strength"></span>/100</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Continuation Patterns -->
-                <div v-if="analysisResults.continuation_patterns" style="margin-top: 20px;">
-                    <h3><i class="fas fa-chart-line"></i> Continuation Patterns</h3>
-                    <div class="continuation-patterns">
-                        <div v-if="analysisResults.continuation_patterns.bullish_flag" class="pattern-item">
-                            <i class="fas fa-flag text-success"></i>
-                            <span>Bullish Flag Detected</span>
-                        </div>
-                        <div v-if="analysisResults.continuation_patterns.pennant" class="pattern-item">
-                            <i class="fas fa-flag text-success"></i>
-                            <span>Pennant Detected</span>
-                        </div>
-                        <div v-if="analysisResults.continuation_patterns.inverted_head_shoulders" class="pattern-item">
-                            <i class="fas fa-flag text-success"></i>
-                            <span>Inverted Head & Shoulders Detected</span>
-                        </div>
-                        <div v-if="!analysisResults.continuation_patterns.bullish_flag && !analysisResults.continuation_patterns.pennant && !analysisResults.continuation_patterns.inverted_head_shoulders" class="pattern-item">
-                            <i class="fas fa-info text-info"></i>
-                            <span>No continuation patterns detected</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ML Prediction -->
-                <div v-if="analysisResults.ml_prediction" style="margin-top: 20px;">
-                    <h3><i class="fas fa-brain"></i> Machine Learning Prediction</h3>
-                    <div class="analysis-results">
-                        <div class="analysis-item">
-                            <span class="analysis-label">Prediction:</span>
-                            <span class="analysis-value"><span v-text="analysisResults.ml_prediction.prediction === 1 ? 'BUY' : 'HOLD'"></span></span>
-                        </div>
-                        <div class="analysis-item">
-                            <span class="analysis-label">Confidence:</span>
-                            <span class="analysis-value"><span v-text="(analysisResults.ml_prediction.confidence * 100).toFixed(1)"></span>%</span>
-                        </div>
-                        <div class="analysis-item">
-                            <span class="analysis-label">Buy Probability:</span>
-                            <span class="analysis-value"><span v-text="(analysisResults.ml_prediction.buy_probability * 100).toFixed(1)"></span>%</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Smart Money Concept Analysis -->
-                <div v-if="smcAnalysis" style="margin-top: 20px;">
-                    <h3><i class="fas fa-brain"></i> Smart Money Concept Analysis</h3>
-                    <div class="row">
-                        <!-- Market Structure -->
-                        <div class="col-md-6 mb-3">
-                            <div class="card border-primary">
-                                <div class="card-header bg-primary text-white">
-                                    <h6 class="mb-0">Market Structure</h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span>Trend Direction:</span>
-                                        <span :class="getTrendClass(smcAnalysis.market_structure.trend_direction)">
-                                            {{ smcAnalysis.market_structure.trend_direction }}
-                                        </span>
-                                    </div>
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span>Higher Highs:</span>
-                                        <span class="text-success">{{ smcAnalysis.market_structure.higher_highs_count }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span>Higher Lows:</span>
-                                        <span class="text-success">{{ smcAnalysis.market_structure.higher_lows_count }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span>Lower Highs:</span>
-                                        <span class="text-danger">{{ smcAnalysis.market_structure.lower_highs_count }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span>Lower Lows:</span>
-                                        <span class="text-danger">{{ smcAnalysis.market_structure.lower_lows_count }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span>Break of Structure:</span>
-                                        <span class="text-warning">{{ smcAnalysis.market_structure.bos_count }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between">
-                                        <span>Change of Character:</span>
-                                        <span class="text-info">{{ smcAnalysis.market_structure.choch_count }}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Order Blocks -->
-                        <div class="col-md-6 mb-3">
-                            <div class="card border-success">
-                                <div class="card-header bg-success text-white">
-                                    <h6 class="mb-0">Order Blocks</h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span>Total:</span>
-                                        <span class="text-primary">{{ smcAnalysis.order_blocks.total }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span>Bullish:</span>
-                                        <span class="text-success">{{ smcAnalysis.order_blocks.bullish }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span>Bearish:</span>
-                                        <span class="text-danger">{{ smcAnalysis.order_blocks.bearish }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span>Mitigated:</span>
-                                        <span class="text-warning">{{ smcAnalysis.order_blocks.mitigated }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between">
-                                        <span>Avg Strength:</span>
-                                        <span class="text-info">{{ smcAnalysis.order_blocks.average_strength }}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Fair Value Gaps -->
-                        <div class="col-md-6 mb-3">
-                            <div class="card border-warning">
-                                <div class="card-header bg-warning text-dark">
-                                    <h6 class="mb-0">Fair Value Gaps</h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span>Total:</span>
-                                        <span class="text-primary">{{ smcAnalysis.fair_value_gaps.total }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span>Bullish:</span>
-                                        <span class="text-success">{{ smcAnalysis.fair_value_gaps.bullish }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span>Bearish:</span>
-                                        <span class="text-danger">{{ smcAnalysis.fair_value_gaps.bearish }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span>Mitigated:</span>
-                                        <span class="text-warning">{{ smcAnalysis.fair_value_gaps.mitigated }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between">
-                                        <span>Avg Gap Size:</span>
-                                        <span class="text-info">{{ smcAnalysis.fair_value_gaps.average_gap_size }}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Liquidity Zones -->
-                        <div class="col-md-6 mb-3">
-                            <div class="card border-info">
-                                <div class="card-header bg-info text-white">
-                                    <h6 class="mb-0">Liquidity Zones</h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span>Total:</span>
-                                        <span class="text-primary">{{ smcAnalysis.liquidity_zones.total }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span>Equal Highs:</span>
-                                        <span class="text-success">{{ smcAnalysis.liquidity_zones.equal_highs }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span>Equal Lows:</span>
-                                        <span class="text-danger">{{ smcAnalysis.liquidity_zones.equal_lows }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between">
-                                        <span>Avg Strength:</span>
-                                        <span class="text-info">{{ smcAnalysis.liquidity_zones.average_strength }}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Institutional Order Blocks -->
-                        <div class="col-md-6 mb-3">
-                            <div class="card border-dark">
-                                <div class="card-header bg-dark text-white">
-                                    <h6 class="mb-0">Institutional Order Blocks</h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span>Total:</span>
-                                        <span class="text-primary">{{ smcAnalysis.institutional_order_blocks.total }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span>Bullish:</span>
-                                        <span class="text-success">{{ smcAnalysis.institutional_order_blocks.bullish }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span>Bearish:</span>
-                                        <span class="text-danger">{{ smcAnalysis.institutional_order_blocks.bearish }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between">
-                                        <span>Avg Volume Ratio:</span>
-                                        <span class="text-info">{{ smcAnalysis.institutional_order_blocks.average_volume_ratio }}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- SMC Signals -->
-                        <div class="col-md-6 mb-3">
-                            <div class="card border-purple">
-                                <div class="card-header bg-purple text-white">
-                                    <h6 class="mb-0">SMC Signals</h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span>Order Block Signals:</span>
-                                        <span class="text-primary">{{ smcAnalysis.signals.order_block_signals }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span>FVG Signals:</span>
-                                        <span class="text-warning">{{ smcAnalysis.signals.fvg_signals }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span>Liquidity Signals:</span>
-                                        <span class="text-info">{{ smcAnalysis.signals.liquidity_signals }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span>Market Structure:</span>
-                                        <span class="text-success">{{ smcAnalysis.signals.market_structure_signals }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span>Premium/Discount:</span>
-                                        <span class="text-secondary">{{ smcAnalysis.signals.premium_discount_signals }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between">
-                                        <span>Institutional:</span>
-                                        <span class="text-dark">{{ smcAnalysis.signals.institutional_signals }}</span>
-                                    </div>
-                                </div>
-                            </div>
+                        <div class="bot-status" v-if="bot.last_analysis">
+                            Last: <span v-text="formatTime(bot.last_analysis)"></span>
                         </div>
                     </div>
                 </div>
@@ -1166,6 +577,7 @@
             <div class="card" v-if="status.positions && status.positions.length > 0">
                 <h2><i class="fas fa-list"></i> Open Positions</h2>
                 
+                <div class="table-responsive">
                 <table class="positions-table">
                     <thead>
                         <tr>
@@ -1180,15 +592,15 @@
                     </thead>
                     <tbody>
                         <tr v-for="position in status.positions" :key="position.ticket">
-                            <td><span v-text="position.symbol"></span></td>
-                            <td><span v-text="position.type"></span></td>
-                            <td><span v-text="position.volume"></span></td>
-                            <td><span v-text="position.price_open.toFixed(5)"></span></td>
-                            <td><span v-text="position.price_current.toFixed(5)"></span></td>
-                            <td :class="position.profit >= 0 ? 'profit-positive' : 'profit-negative'">
+                            <td data-label="Symbol"><span v-text="position.symbol"></span></td>
+                            <td data-label="Type"><span v-text="position.type"></span></td>
+                            <td data-label="Volume"><span v-text="position.volume"></span></td>
+                            <td data-label="Entry Price"><span v-text="position.price_open.toFixed(5)"></span></td>
+                            <td data-label="Current Price"><span v-text="position.price_current.toFixed(5)"></span></td>
+                            <td data-label="Profit" :class="position.profit >= 0 ? 'profit-positive' : 'profit-negative'">
                                 $<span v-text="position.profit.toFixed(2)"></span>
                             </td>
-                            <td>
+                            <td data-label="Actions">
                                 <button @click="closePosition(position.ticket)" class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;">
                                     Close
                                 </button>
@@ -1196,13 +608,11 @@
                         </tr>
                     </tbody>
                 </table>
+                </div>
                 
                                  <div style="margin-top: 15px;">
-                     <button @click="closeAllPositions" class="btn btn-danger" style="margin-right: 10px;">
+                    <button @click="closeAllPositions" class="btn btn-danger">
                          <i class="fas fa-times"></i> Close All Positions
-                     </button>
-                     <button @click="closeSymbolPositions" class="btn btn-warning">
-                         <i class="fas fa-times"></i> Close Symbol Positions
                      </button>
                  </div>
             </div>
@@ -1227,52 +637,31 @@
             data() {
                 return {
                     config: {
-                        account_number: '12345678',
-                        password: 'your_password_here',
-                        server: 'XMGlobal-Demo',
-                        symbol: 'EURUSD',
-                        timeframe: '5m',
-                        risk_per_trade: 2.0,
-                        auto_trade: false,
-                        use_ml: true
+                        account_number: '',
+                        password: '',
+                        server: ''
                     },
                     status: {
                         connected: false,
                         running: false,
                         account_info: null,
                         positions: [],
-                        connection_details: {
-                            has_bot_instance: false,
-                            has_mt5_connector: false,
-                            mt5_initialized: false,
-                            credentials_configured: false,
-                            connection_healthy: false
-                        }
+                        trading_bots: {}
                     },
-                    availableSymbols: [
-                        'EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF', 'AUDUSD', 'USDCAD', 'NZDUSD',
-                        'EURGBP', 'EURJPY', 'GBPJPY', 'CHFJPY', 'AUDCAD', 'AUDCHF', 'AUDJPY',
-                        'AUDNZD', 'CADCHF', 'CADJPY', 'EURAUD', 'EURCAD', 'EURCHF', 'EURNZD',
-                        'GBPAUD', 'GBPCAD', 'GBPCHF', 'GBPNZD', 'NZDCAD', 'NZDCHF', 'NZDJPY'
-                    ],
-                    availableTimeframes: [
-                        { value: '1m', label: '1 Minute' },
-                        { value: '5m', label: '5 Minutes' },
-                        { value: '15m', label: '15 Minutes' },
-                        { value: '30m', label: '30 Minutes' },
-                        { value: '1h', label: '1 Hour' },
-                        { value: '4h', label: '4 Hours' },
-                        { value: '1d', label: '1 Day' }
-                    ],
-                    analysisResults: null,
-                    smcAnalysis: null,
                     connecting: false,
-                    analyzing: false,
+                    starting: false,
                     alerts: [],
-                    alertCounter: 0
+                    availableSymbols: [],
+                    selectedSymbols: [],
+                    riskPerTradeInput: 2.0,
+                    apiKey: localStorage.getItem('apiKey') || ''
                 }
             },
             mounted() {
+                // Apply stored API key to axios if present
+                if (this.apiKey) {
+                    axios.defaults.headers.common['X-API-Key'] = this.apiKey;
+                }
                 this.loadConfig();
                 this.updateStatus();
                 // Update status every 5 seconds
@@ -1281,24 +670,45 @@
             methods: {
                 async loadConfig() {
                     try {
-                        const response = await axios.get('/api/env-config');
-                        if (response.data.config) {
-                            this.config = { ...this.config, ...response.data.config };
+                        const resp = await axios.get('/api/config');
+                        this.availableSymbols = resp.data?.available_symbols || [];
+                        const cfg = resp.data?.config || {};
+                        if (Array.isArray(cfg.symbols_to_trade)) {
+                            this.selectedSymbols = cfg.symbols_to_trade;
                         }
-                        this.availableSymbols = response.data.available_symbols;
-                        this.availableTimeframes = response.data.available_timeframes;
-                        // Initialize demo mode based on server setting
-                        this.isDemoMode = this.config.server === 'XMGlobal-Demo';
-                    } catch (error) {
-                        console.error('Error loading config:', error);
-                        this.showAlert('Failed to load configuration from .env file', 'error');
+                    } catch (e) {
+                        try {
+                            const resp2 = await axios.get('/api/env-config');
+                            this.availableSymbols = resp2.data?.available_symbols || [];
+                        } catch (e2) {
+                            this.availableSymbols = ['EURUSD','GBPUSD','USDJPY','USDCHF','AUDUSD'];
+                        }
                     }
                 },
-                
+                toggleSymbol(symbol) {
+                    const i = this.selectedSymbols.indexOf(symbol);
+                    if (i >= 0) {
+                        this.selectedSymbols.splice(i, 1);
+                    } else {
+                        if (this.selectedSymbols.length >= 5) {
+                            this.showAlert('You can select up to 5 symbols', 'warning');
+                            return;
+                        }
+                        this.selectedSymbols.push(symbol);
+                    }
+                },
                 async updateStatus() {
                     try {
                         const response = await axios.get('/api/status');
-                        this.status = response.data;
+                        const incoming = response.data || {};
+                        // Merge with defaults to avoid undefined objects breaking rendering
+                        this.status = {
+                            ...this.status,
+                            ...incoming,
+                            trading_bots: incoming.trading_bots || this.status.trading_bots || {},
+                            positions: Array.isArray(incoming.positions) ? incoming.positions : (this.status.positions || []),
+                            account_info: incoming.account_info || null
+                        };
                     } catch (error) {
                         console.error('Error updating status:', error);
                     }
@@ -1309,19 +719,38 @@
                          this.showAlert('Please enter account number, password, and server', 'error');
                          return;
                      }
+                    // Persist API key and set axios header if provided
+                    if (this.apiKey) {
+                        localStorage.setItem('apiKey', this.apiKey);
+                        axios.defaults.headers.common['X-API-Key'] = this.apiKey;
+                     }
                     
                     this.connecting = true;
                     try {
+                        // Persist selected symbols to backend config before connecting
+                        if (this.selectedSymbols && this.selectedSymbols.length > 0) {
+                            try { await axios.post('/api/config', { symbols_to_trade: this.selectedSymbols }); } catch (e) {}
+                        }
                         const response = await axios.post('/api/connect', {
                             account_number: this.config.account_number,
                             password: this.config.password,
                             server: this.config.server
                         });
                         
-                        if (response.data.success) {
+                        if (response.data && response.data.success) {
                             this.showAlert('Successfully connected to MT5!', 'success');
                             this.status.connected = true;
-                            this.status.account_info = response.data.account_info;
+                            this.status.account_info = response.data.account_info || null;
+                            // Capture API key if provided and set default header
+                            if (response.data.api_key) {
+                                this.apiKey = response.data.api_key;
+                                localStorage.setItem('apiKey', this.apiKey);
+                                axios.defaults.headers.common['X-API-Key'] = this.apiKey;
+                            }
+                            // Immediately fetch latest status after connecting
+                            try { await this.updateStatus(); } catch (e) {}
+                            // Start automated trading automatically after connect
+                            try { await axios.post('/api/start-automated-trading'); } catch (e) {}
                         } else {
                             this.showAlert(response.data.error || 'Connection failed', 'error');
                         }
@@ -1332,124 +761,56 @@
                     }
                 },
                 
-                async disconnectMT5() {
-                    try {
-                        await axios.post('/api/stop-trading');
-                        this.status.connected = false;
-                        this.status.running = false;
-                        this.showAlert('Disconnected from MT5', 'info');
-                    } catch (error) {
-                        console.error('Error disconnecting:', error);
+                async startAutomatedTrading() {
+                    this.starting = true;
+                    if (this.selectedSymbols && this.selectedSymbols.length > 0) {
+                        try { await axios.post('/api/config', { symbols_to_trade: this.selectedSymbols }); } catch (e) {}
                     }
-                },
-                
-                async analyzeMarket() {
-                    if (!this.config.symbol || !this.config.timeframe) {
-                        this.showAlert('Please select symbol and timeframe', 'error');
-                        return;
-                    }
-                    
-                    this.analyzing = true;
                     try {
-                        const response = await axios.post('/api/analyze', {
-                            symbol: this.config.symbol,
-                            timeframe: this.config.timeframe
-                        });
-                        
-                        if (response.data.success) {
-                            this.analysisResults = response.data;
-                            this.showAlert('Market analysis completed!', 'success');
-                        } else {
-                            this.showAlert(response.data.error || 'Analysis failed', 'error');
+                        // Persist selections and risk to config before starting
+                        const updates = {}
+                        if (this.selectedSymbols && this.selectedSymbols.length > 0) {
+                            updates.symbols_to_trade = this.selectedSymbols
                         }
-                    } catch (error) {
-                        this.showAlert(error.response?.data?.error || 'Analysis failed', 'error');
-                    } finally {
-                        this.analyzing = false;
-                    }
-                },
-                
-                async analyzeSMC() {
-                    if (!this.config.symbol || !this.config.timeframe) {
-                        this.showAlert('Please select a symbol and timeframe', 'warning');
-                        return;
-                    }
-                    
-                    this.analyzing = true;
-                    try {
-                        const response = await axios.get(`/api/smc_analysis/${this.config.symbol}/${this.config.timeframe}`);
-                        
-                        if (response.data) {
-                            this.smcAnalysis = response.data;
-                            this.showAlert('Smart Money Concept analysis completed!', 'success');
-                        } else {
-                            this.showAlert('SMC analysis failed', 'error');
+                        const rpt = parseFloat(this.riskPerTradeInput)
+                        if (!isNaN(rpt)) {
+                            // Convert percent to fraction for backend
+                            const fraction = Math.max(0.001, Math.min(0.10, rpt / 100))
+                            updates.risk_per_trade = fraction
                         }
-                    } catch (error) {
-                        this.showAlert(error.response?.data?.error || 'SMC analysis failed', 'error');
-                    } finally {
-                        this.analyzing = false;
-                    }
-                },
-                
-                async getCombinedAnalysis() {
-                    if (!this.config.symbol || !this.config.timeframe) {
-                        this.showAlert('Please select a symbol and timeframe', 'warning');
-                        return;
-                    }
-                    
-                    this.analyzing = true;
-                    try {
-                        const response = await axios.get(`/api/combined_analysis/${this.config.symbol}/${this.config.timeframe}`);
-                        
-                        if (response.data) {
-                            this.analysisResults = response.data;
-                            this.showAlert('Combined analysis completed!', 'success');
-                        } else {
-                            this.showAlert('Combined analysis failed', 'error');
+                        if (Object.keys(updates).length > 0) {
+                            try { await axios.post('/api/config', updates) } catch (e) {}
                         }
-                    } catch (error) {
-                        this.showAlert(error.response?.data?.error || 'Combined analysis failed', 'error');
-                    } finally {
-                        this.analyzing = false;
-                    }
-                },
-                
-                getTrendClass(trend) {
-                    if (trend === 'UPTREND') return 'text-success font-weight-bold';
-                    if (trend === 'DOWNTREND') return 'text-danger font-weight-bold';
-                    return 'text-warning font-weight-bold';
-                },
-                
-                async startTrading() {
-                    try {
-                        const response = await axios.post('/api/start-trading', {
-                            auto_trade: this.config.auto_trade
-                        });
+                        const response = await axios.post('/api/start-automated-trading');
                         
-                        if (response.data.success) {
+                        if (response.data && response.data.success) {
                             this.status.running = true;
-                            this.showAlert('Trading started successfully!', 'success');
+                            this.showAlert('Automated trading started successfully!', 'success');
+                            // Refresh status to reflect running state and bots
+                            try { await this.updateStatus(); } catch (e) {}
                         } else {
-                            this.showAlert(response.data.error || 'Failed to start trading', 'error');
+                            this.showAlert(response.data.error || 'Failed to start automated trading', 'error');
                         }
                     } catch (error) {
-                        this.showAlert(error.response?.data?.error || 'Failed to start trading', 'error');
+                        this.showAlert(error.response?.data?.error || 'Failed to start automated trading', 'error');
+                    } finally {
+                        this.starting = false;
                     }
                 },
                 
-                async stopTrading() {
+                
+                async stopAutomatedTrading() {
                     try {
-                        const response = await axios.post('/api/stop-trading');
+                        const response = await axios.post('/api/stop-automated-trading');
                         
-                        if (response.data.success) {
+                        if (response.data && response.data.success) {
                             this.status.running = false;
-                            this.showAlert('Trading stopped successfully!', 'warning');
+                            this.showAlert('Automated trading stopped successfully!', 'warning');
                         } else {
-                            this.showAlert(response.data.error || 'Failed to stop trading', 'error');
+                            this.showAlert(response.data.error || 'Failed to stop automated trading', 'error');
                         }
                     } catch (error) {
-                        this.showAlert(error.response?.data?.error || 'Failed to stop trading', 'error');
+                        this.showAlert(error.response?.data?.error || 'Failed to stop automated trading', 'error');
                     }
                 },
                 
@@ -1457,7 +818,7 @@
                     try {
                         const response = await axios.post(`/api/close-position/${ticket}`);
                         
-                        if (response.data.success) {
+                        if (response.data && response.data.success) {
                             this.showAlert('Position closed successfully!', 'success');
                             this.updateStatus();
                         } else {
@@ -1472,7 +833,7 @@
                      try {
                          const response = await axios.post('/api/close-positions');
                          
-                         if (response.data.success) {
+                        if (response.data && response.data.success) {
                              this.showAlert('All positions closed!', 'success');
                              this.updateStatus();
                          } else {
@@ -1483,111 +844,10 @@
                      }
                  },
                  
-                                 async closeSymbolPositions() {
-                    try {
-                        const response = await axios.post(`/api/close-symbol-positions/${this.config.symbol}`);
-                        
-                        if (response.data.success) {
-                            this.showAlert(`Positions closed for ${this.config.symbol}!`, 'success');
-                            this.updateStatus();
-                        } else {
-                            this.showAlert(response.data.error || 'Failed to close symbol positions', 'error');
-                        }
-                    } catch (error) {
-                        this.showAlert(error.response?.data?.error || 'Failed to close symbol positions', 'error');
-                    }
-                },
-                
-                // Enhanced error handling and retry logic
-                async retryOperation(operation, maxRetries = 3) {
-                    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-                        try {
-                            return await operation();
-                        } catch (error) {
-                            if (attempt === maxRetries) {
-                                throw error;
-                            }
-                            console.log(`Attempt ${attempt} failed, retrying...`);
-                            await this.delay(1000 * attempt); // Exponential backoff
-                        }
-                    }
-                },
-                
-                delay(ms) {
-                    return new Promise(resolve => setTimeout(resolve, ms));
-                },
-                
-                // Enhanced status update with error handling
-                async updateStatus() {
-                    try {
-                        const response = await this.retryOperation(async () => {
-                            return await axios.get('/api/status');
-                        });
-                        
-                        this.status = response.data;
-                        this.retryCount = 0; // Reset retry count on success
-                    } catch (error) {
-                        this.retryCount++;
-                        console.error('Status update failed:', error);
-                        
-                        if (this.retryCount >= this.maxRetries) {
-                            this.showAlert('Failed to update status after multiple attempts', 'error');
-                            this.errorDetails = error.response?.data || error.message;
-                        }
-                    }
-                },
-                
-                // Start automatic status updates
-                startStatusUpdates() {
-                    if (this.statusUpdateInterval) {
-                        clearInterval(this.statusUpdateInterval);
-                    }
-                    
-                    this.statusUpdateInterval = setInterval(() => {
-                        this.updateStatus();
-                    }, 5000); // Update every 5 seconds
-                },
-                
-                // Stop automatic status updates
-                stopStatusUpdates() {
-                    if (this.statusUpdateInterval) {
-                        clearInterval(this.statusUpdateInterval);
-                        this.statusUpdateInterval = null;
-                    }
-                },
-                
-                // Enhanced connection with better error handling
-                async connectMT5() {
-                    if (!this.config.account_number || !this.config.password || !this.config.server) {
-                        this.showAlert('Please enter account number, password, and server', 'error');
-                        return;
-                    }
-                    
-                    this.connecting = true;
-                    try {
-                        const response = await this.retryOperation(async () => {
-                            return await axios.post('/api/connect', {
-                                account_number: this.config.account_number,
-                                password: this.config.password,
-                                server: this.config.server
-                            });
-                        });
-                        
-                        if (response.data.success) {
-                            this.showAlert('Successfully connected to MT5!', 'success');
-                            this.status.connected = true;
-                            this.status.account_info = response.data.account_info;
-                            this.status.connection_details = response.data.connection_details;
-                            this.retryCount = 0;
-                        } else {
-                            this.showAlert(response.data.error || 'Connection failed', 'error');
-                        }
-                    } catch (error) {
-                        this.showAlert(error.response?.data?.error || 'Connection failed', 'error');
-                        this.errorDetails = error.response?.data || error.message;
-                    } finally {
-                        this.connecting = false;
-                    }
+                formatTime(timestamp) {
+                    if (!timestamp) return 'Never';
+                    const date = new Date(timestamp);
+                    return date.toLocaleTimeString();
                 },
                 
                 showAlert(message, type = 'info') {

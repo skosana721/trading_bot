@@ -16,6 +16,7 @@ import sys
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import os
+import secrets
 import json
 import threading
 import time
@@ -27,6 +28,7 @@ from functools import wraps
 # Import trading bot components
 from mt5_connector import MT5Connector
 from mt5_trading_bot import MT5TradingBot
+from trading_bot import TradingBot  # Import the enhanced trading bot
 
 # Load environment variables
 load_dotenv()
@@ -63,20 +65,39 @@ app_logger, trading_logger, mt5_logger = setup_logging()
 app = Flask(__name__)
 CORS(app)  # Enable CORS for Vue frontend
 
+# Simple API key auth decorator
+API_KEY = os.getenv('API_KEY')
+def require_api_key(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not API_KEY:
+            return f(*args, **kwargs)
+        key = request.headers.get('X-API-Key') or request.args.get('api_key')
+        if key != API_KEY:
+            return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+        return f(*args, **kwargs)
+    return decorated
+
 # Global variables for bot state
 bot_instance = None
+enhanced_bot_instance = None  # Enhanced trading bot instance
 bot_thread = None
 bot_running = False
+# Multi-symbol trading support
+trading_bots = {}
 bot_config = {
-    'account_number': os.getenv('XM_ACCOUNT_NUMBER'),
-    'password': os.getenv('XM_PASSWORD'),
-    'server': os.getenv('XM_SERVER', 'XMGlobal-Demo'),
+    'account_number': '',
+    'password': '',
+    'server': 'XMGlobal-Demo',
     'symbol': 'EURUSD',
     'timeframe': '5m',
     'risk_per_trade': float(os.getenv('RISK_PER_TRADE', 0.02)),
     'account_size': None,  # No longer used - balance fetched from MT5
     'auto_trade': os.getenv('AUTO_TRADE', 'false').lower() == 'true',
-    'use_ml': os.getenv('USE_ML', 'true').lower() == 'true'
+    'use_ml': os.getenv('USE_ML', 'true').lower() == 'true',
+    'enable_automation': os.getenv('ENABLE_AUTOMATION', 'true').lower() == 'true',
+    # Symbols must be selected from the frontend; start empty
+    'symbols_to_trade': []
 }
 
 # Available symbols and timeframes
@@ -95,6 +116,14 @@ AVAILABLE_TIMEFRAMES = [
     {'value': '1h', 'label': '1 Hour'},
     {'value': '4h', 'label': '4 Hours'},
     {'value': '1d', 'label': '1 Day'}
+]
+
+# Market types for enhanced trading bot
+MARKET_TYPES = [
+    {'value': 'stock', 'label': 'Stock Market'},
+    {'value': 'forex', 'label': 'Forex Market'},
+    {'value': 'crypto', 'label': 'Cryptocurrency'},
+    {'value': 'commodities', 'label': 'Commodities'}
 ]
 
 # Error handling decorator
@@ -129,6 +158,29 @@ def validate_required_fields(required_fields):
         return decorated_function
     return decorator
 
+def initialize_enhanced_bot(symbol, timeframe, market_type='forex', enable_automation=True):
+    """Initialize the enhanced trading bot"""
+    global enhanced_bot_instance
+    
+    try:
+        # Create enhanced trading bot instance
+        enhanced_bot_instance = TradingBot(
+            symbol=symbol,
+            period=timeframe,
+            market_type=market_type,
+            account_size=10000,  # Will be updated from MT5 balance
+            risk_per_trade=bot_config['risk_per_trade'],
+            enable_automation=enable_automation,
+            mt5_config=bot_config
+        )
+        
+        app_logger.info(f"Enhanced trading bot initialized for {symbol} ({market_type})")
+        return True
+        
+    except Exception as e:
+        app_logger.error(f"Failed to initialize enhanced trading bot: {e}")
+        return False
+
 @app.route('/')
 def index():
     """Serve the Vue frontend"""
@@ -143,11 +195,14 @@ def get_config():
     return jsonify({
         'config': bot_config,
         'available_symbols': AVAILABLE_SYMBOLS,
-        'available_timeframes': AVAILABLE_TIMEFRAMES
+        'available_timeframes': AVAILABLE_TIMEFRAMES,
+        'market_types': MARKET_TYPES,
+        'enhanced_bot_available': True
     })
 
 @app.route('/api/config', methods=['POST'])
 @handle_errors
+@require_api_key
 @validate_required_fields([])  # No required fields for config update
 def update_config():
     """Update bot configuration"""
@@ -169,6 +224,15 @@ def update_config():
             config_updates['symbol'] = data['symbol']
         else:
             return jsonify({'success': False, 'error': f'Invalid symbol: {data["symbol"]}'}), 400
+    if 'symbols_to_trade' in data:
+        symbols = data.get('symbols_to_trade') or []
+        if not isinstance(symbols, list):
+            return jsonify({'success': False, 'error': 'symbols_to_trade must be a list'}), 400
+        symbols = [s for s in symbols if s in AVAILABLE_SYMBOLS]
+        symbols = list(dict.fromkeys(symbols))  # dedupe, preserve order
+        if len(symbols) == 0 or len(symbols) > 5:
+            return jsonify({'success': False, 'error': 'Select between 1 and 5 symbols'}), 400
+        config_updates['symbols_to_trade'] = symbols
     if 'timeframe' in data:
         valid_timeframes = [tf['value'] for tf in AVAILABLE_TIMEFRAMES]
         if data['timeframe'] in valid_timeframes:
@@ -188,6 +252,8 @@ def update_config():
         config_updates['auto_trade'] = bool(data['auto_trade'])
     if 'use_ml' in data:
         config_updates['use_ml'] = bool(data['use_ml'])
+    if 'enable_automation' in data:
+        config_updates['enable_automation'] = bool(data['enable_automation'])
     
     # Apply updates
     bot_config.update(config_updates)
@@ -197,17 +263,18 @@ def update_config():
 
 @app.route('/api/env-config', methods=['GET'])
 def get_env_config():
-    """Get configuration from environment variables"""
+    """Provide default configuration without pulling credentials from environment"""
     env_config = {
-        'account_number': os.getenv('XM_ACCOUNT_NUMBER', ''),
-        'password': os.getenv('XM_PASSWORD', ''),
-        'server': os.getenv('XM_SERVER', 'XMGlobal-Demo'),
+        'account_number': '',
+        'password': '',
+        'server': 'XMGlobal-Demo',
         'symbol': 'EURUSD',
         'timeframe': '5m',
         'risk_per_trade': float(os.getenv('RISK_PER_TRADE', 0.02)),
-        'account_size': None,  # No longer used - balance fetched from MT5
-        'auto_trade': os.getenv('AUTO_TRADE', 'false').lower() == 'true',
-        'use_ml': os.getenv('USE_ML', 'true').lower() == 'true'
+        'account_size': None,
+        'auto_trade': False,
+        'use_ml': os.getenv('USE_ML', 'true').lower() == 'true',
+        'enable_automation': os.getenv('ENABLE_AUTOMATION', 'true').lower() == 'true'
     }
     return jsonify({
         'config': env_config,
@@ -271,30 +338,47 @@ def connect_mt5():
             'server': server
         })
         
-        # Create or update bot instance
-        app_logger.info("Creating/updating bot instance...")
-        bot_instance = MT5TradingBot(
-            symbol=bot_config.get('symbol', 'EURUSD'),
-            timeframe=bot_config.get('timeframe', '5m'),
-            risk_per_trade=bot_config.get('risk_per_trade', 0.02),
-            use_mt5_data=True,
-            auto_trade=False,
-            use_ml=bot_config.get('use_ml', True)
-        )
-        
-        # Assign the working connector to the bot
-        bot_instance.mt5_connector = connector
-        bot_instance.connected = True
+        # Create or update per-symbol bot instances for selected symbols
+        app_logger.info("Creating/updating per-symbol bot instances...")
+        global trading_bots, bot_instance
+        trading_bots = {}
+        selected = bot_config.get('symbols_to_trade') or []
+        if len(selected) == 0:
+            # If none selected, default to primary symbol only to allow minimal operation
+            selected = [bot_config.get('symbol', 'EURUSD')]
+        for sym in selected:
+            b = MT5TradingBot(
+                symbol=sym,
+                timeframe=bot_config.get('timeframe', '5m'),
+                risk_per_trade=bot_config.get('risk_per_trade', 0.02),
+                use_mt5_data=True,
+                auto_trade=True,
+                use_ml=bot_config.get('use_ml', True)
+            )
+            b.mt5_connector = connector
+            b.connected = True
+            b.auto_trade = True
+            b.last_analysis = None
+            trading_bots[sym] = b
+        # Set primary instance to the configured symbol
+        primary_symbol = bot_config.get('symbol', 'EURUSD')
+        bot_instance = trading_bots.get(primary_symbol) or next(iter(trading_bots.values()))
         # Account balance is now fetched dynamically from MT5
         
-        # Test market data retrieval
-        app_logger.info("Testing market data retrieval...")
+        # Test market data retrieval on primary symbol
+        app_logger.info("Testing market data retrieval (primary symbol)...")
         test_data = bot_instance.get_market_data()
         if test_data is None or len(test_data) < 10:
             app_logger.warning("Limited market data available, but connection is working")
         else:
             app_logger.info(f"Market data test successful ({len(test_data)} data points)")
         
+        # Auto-generate an API key upon successful connection if not set, or rotate
+        global API_KEY
+        API_KEY = secrets.token_urlsafe(32)
+        os.environ['API_KEY'] = API_KEY
+        app_logger.info("API key generated for session")
+
         return jsonify({
             'success': True,
             'message': 'Successfully connected to MT5',
@@ -312,158 +396,115 @@ def connect_mt5():
                 'server': server,
                 'connected': True,
                 'data_available': test_data is not None and len(test_data) > 0
-            }
+            },
+            'api_key': API_KEY
         })
     else:
         app_logger.error("MT5 connection failed")
+        try:
+            last_err = connector.get_last_error()
+        except Exception:
+            last_err = None
         return jsonify({
             'success': False, 
-            'error': 'Failed to connect to MT5. Please check your credentials, server name, and ensure MT5 terminal is running.'
+            'error': 'Failed to connect to MT5. Please check your credentials, server name, and ensure MT5 terminal is running.',
+            'details': str(last_err) if last_err else None
         }), 400
 
 @app.route('/api/analyze', methods=['POST'])
 @handle_errors
 def analyze_market():
-    """Perform market analysis for a symbol and timeframe"""
-    global bot_instance
-    
-    data = request.get_json()
+    """Perform market analysis for one or multiple symbols"""
+    global bot_instance, trading_bots
+
+    data = request.get_json() or {}
+    symbols = data.get('symbols')
     symbol = data.get('symbol')
-    timeframe = data.get('timeframe')
-    
-    if not symbol or not timeframe:
-        return jsonify({'success': False, 'error': 'Symbol and timeframe are required'}), 400
-    
-    # Check if we have an existing bot instance with MT5 connection
-    if bot_instance and bot_instance.connected:
-        # Update the existing bot with new symbol and timeframe
-        bot_instance.symbol = symbol
-        bot_instance.timeframe = timeframe
-        bot_instance.risk_per_trade = bot_config.get('risk_per_trade', 0.02)
-        bot_instance.use_ml = bot_config.get('use_ml', True)
+    timeframe = data.get('timeframe') or bot_config.get('timeframe', '5m')
+
+    if not symbols and not symbol:
+        return jsonify({'success': False, 'error': 'Provide symbol or symbols[]'}), 400
+
+    symbols_to_run = []
+    if symbols:
+        if not isinstance(symbols, list):
+            return jsonify({'success': False, 'error': 'symbols must be a list'}), 400
+        symbols = [s for s in symbols if s in AVAILABLE_SYMBOLS]
+        symbols = list(dict.fromkeys(symbols))
+        if len(symbols) == 0 or len(symbols) > 5:
+            return jsonify({'success': False, 'error': 'Select between 1 and 5 symbols'}), 400
+        symbols_to_run = symbols
     else:
-        # Create new trading bot instance
-        bot_instance = MT5TradingBot(
-            symbol=symbol,
-            timeframe=timeframe,
-            risk_per_trade=bot_config.get('risk_per_trade', 0.02),
-            use_mt5_data=True,
-            auto_trade=False,  # Don't auto trade for analysis
-            use_ml=bot_config.get('use_ml', True)
-        )
-    
-    # Update config
-    bot_config['symbol'] = symbol
-    bot_config['timeframe'] = timeframe
-    
-    # Run analysis
-    analysis = bot_instance.run_analysis_cycle()
-    app_logger.info(f"Analysis result: {type(analysis)}")
-    if analysis:
-        app_logger.info(f"Analysis keys: {list(analysis.keys())}")
-        try:
-            # Get ML prediction if available
-            ml_prediction = None
-            if bot_instance.use_ml and bot_instance.model_trained and bot_instance.analysis_bot and bot_instance.analysis_bot.data is not None:
-                ml_prediction = bot_instance.get_ml_prediction(bot_instance.analysis_bot.data)
-            
-            # Get trading signals
-            signals = bot_instance.get_trading_signals(analysis)
-            
-            # Ensure analysis data is JSON serializable and has expected keys
-            serializable_analysis = {}
-            for key, value in analysis.items():
-                if isinstance(value, (int, float, str, bool, list, dict)):
-                    serializable_analysis[key] = value
-                else:
-                    serializable_analysis[key] = str(value)
-            
-            # Ensure all expected keys are present for frontend compatibility
-            expected_keys = {
-                'entry_conditions': [],
-                'uptrend_confirmed': False,
-                'downtrend_confirmed': False,
-                'trend_direction': 'SIDEWAYS',
-                'trend_strength': 0,
-                'overall_strength': 0,
-                'primary_timeframe': timeframe,
-                'primary_analysis': {
-                    'hh_count': 0,
-                    'hl_count': 0,
-                    'lh_count': 0,
-                    'll_count': 0,
-                    'higher_highs': [],
-                    'higher_lows': [],
-                    'lower_highs': [],
-                    'lower_lows': [],
-                    'uptrend_confirmed': False,
-                    'downtrend_confirmed': False
-                },
-                'uptrend_analysis': {
-                    'hh_count': 0,
-                    'hl_count': 0,
-                    'uptrend_confirmed': False
-                },
-                'downtrend_analysis': {
-                    'lh_count': 0,
-                    'll_count': 0,
-                    'downtrend_confirmed': False
-                },
-                'h4_analysis': {
-                    'hh_count': 0,
-                    'hl_count': 0,
-                    'uptrend_confirmed': False
-                },
-                'strong_trendlines': [],
-                'breakout_signals': None,
-                'continuation_patterns': None,
-                'timeframe': timeframe,
-                'trading_rules_followed': {
-                    'multi_timeframe_confirmed': False,
-                    'min_hh_hl_met': False,
-                    'strong_trendlines': False,
-                    'breakout_retest_ready': False,
-                    'continuation_patterns_ready': False
+        if symbol not in AVAILABLE_SYMBOLS:
+            return jsonify({'success': False, 'error': f'Invalid symbol: {symbol}'}), 400
+        symbols_to_run = [symbol]
+
+    app_logger.info(f"Running analysis for symbols: {symbols_to_run} ({timeframe})")
+
+    results = {}
+    for sym in symbols_to_run:
+        # Reuse existing per-symbol bot when available
+        b = trading_bots.get(sym)
+        if not b:
+            b = MT5TradingBot(
+                symbol=sym,
+                timeframe=timeframe,
+                risk_per_trade=bot_config.get('risk_per_trade', 0.02),
+                use_mt5_data=True,
+                auto_trade=False,
+                use_ml=bot_config.get('use_ml', True)
+            )
+            if bot_instance and bot_instance.mt5_connector:
+                b.mt5_connector = bot_instance.mt5_connector
+                b.connected = True
+        combined_signal = b.run_analysis_cycle()
+        b.last_analysis = {'timestamp': datetime.now()} if combined_signal else b.last_analysis
+
+        if combined_signal:
+            try:
+                results[sym] = {
+                    'success': True,
+                    'signal_type': combined_signal.get('signal_type'),
+                    'signal_strength': combined_signal.get('signal_strength'),
+                    'timeframe': combined_signal.get('timeframe'),
+                    'entry_price': round(combined_signal['entry_price'], 5) if combined_signal['entry_price'] else None,
+                    'stop_loss': round(combined_signal['stop_loss'], 5) if combined_signal['stop_loss'] else None,
+                    'target': round(combined_signal['target'], 5) if combined_signal['target'] else None,
+                    'position_size': round(combined_signal.get('position_size') or 0, 2),
+                    'potential_profit': round(combined_signal.get('potential_profit') or 0, 2),
+                    'risk_amount': round(combined_signal.get('risk_amount') or 0, 2),
                 }
-            }
-            
-            def merge_defaults(target, defaults):
-                """Recursively merge default values into target dict"""
-                for key, default_value in defaults.items():
-                    if key not in target:
-                        target[key] = default_value
-                    elif isinstance(default_value, dict) and isinstance(target.get(key), dict):
-                        merge_defaults(target[key], default_value)
-            
-            merge_defaults(serializable_analysis, expected_keys)
-            
-            return jsonify({
-                'success': True,
-                'analysis': serializable_analysis,
-                'ml_prediction': ml_prediction,
-                'signals': signals,
-                'symbol': symbol,
-                'timeframe': timeframe
-            })
-        except Exception as e:
-            app_logger.error(f"Error serializing analysis response: {e}")
-            app_logger.error(f"Analysis keys: {list(analysis.keys()) if analysis else 'None'}")
-            import traceback
-            traceback.print_exc()
-            return jsonify({'success': False, 'error': f'Error serializing analysis: {str(e)}'}), 500
-    else:
-        return jsonify({'success': False, 'error': 'Analysis failed'}), 400
+            except Exception as e:
+                app_logger.error(f"Error serializing {sym} analysis: {e}")
+                results[sym] = {'success': False, 'error': f'Error serializing analysis: {str(e)}'}
+        else:
+            results[sym] = {'success': False, 'error': 'Analysis failed'}
+
+    return jsonify({'success': True, 'results': results, 'timeframe': timeframe})
 
 @app.route('/api/start-trading', methods=['POST'])
 @handle_errors
+@require_api_key
 def start_trading():
     """Start automated trading"""
     global bot_instance, bot_thread, bot_running
     
-    data = request.get_json()
+    # Accept empty/non-JSON bodies from alias endpoints or simple POSTs
+    data = request.get_json(silent=True) or {}
     auto_trade = data.get('auto_trade', True)
     symbol = data.get('symbol', bot_config.get('symbol', 'EURUSD'))
     timeframe = data.get('timeframe', bot_config.get('timeframe', '5m'))
+
+    # Optionally accept credentials in this request to streamline starting
+    account_number = data.get('account_number')
+    password = data.get('password')
+    server = data.get('server')
+    if account_number and password and server:
+        bot_config.update({
+            'account_number': str(account_number),
+            'password': password,
+            'server': server
+        })
     
     app_logger.info(f"\nStarting trading session for {symbol} on {timeframe} timeframe")
     app_logger.info(f"   Auto Trade: {auto_trade}")
@@ -503,6 +544,7 @@ def start_trading():
                 app_logger.info("MT5 connection established")
                 new_bot.mt5_connector = connector
                 new_bot.connected = True
+                new_bot.auto_trade = auto_trade
                 
                 # Get account info
                 account_info = connector.get_account_summary()
@@ -543,13 +585,22 @@ def start_trading():
             'error': 'MT5 functionality test failed. Please check your MT5 terminal.'
         }), 400
     
-    # Run initial analysis to ensure signals can be generated
-    app_logger.info("Running initial market analysis...")
-    initial_analysis = bot_instance.run_analysis_cycle()
-    if not initial_analysis:
+    # Run initial analysis per selected symbols to ensure signals can be generated
+    app_logger.info("Running initial market analysis for selected symbols...")
+    selected = bot_config.get('symbols_to_trade') or [bot_config.get('symbol', 'EURUSD')]
+    analyzed = {}
+    for sym in selected:
+        b = trading_bots.get(sym) or bot_instance
+        if b.symbol != sym:
+            b.symbol = sym
+        # Ensure auto trading preference is propagated
+        b.auto_trade = auto_trade
+        res = b.run_analysis_cycle()
+        analyzed[sym] = bool(res)
+    if not any(analyzed.values()):
         return jsonify({
             'success': False, 
-            'error': 'Failed to perform initial market analysis. Insufficient data or connection issues.'
+            'error': 'Failed to perform initial market analysis for all symbols.'
         }), 400
     
     # Update bot configuration
@@ -580,6 +631,7 @@ def start_trading():
 
 @app.route('/api/stop-trading', methods=['POST'])
 @handle_errors
+@require_api_key
 def stop_trading():
     """Stop automated trading"""
     global bot_running, bot_instance
@@ -598,6 +650,19 @@ def stop_trading():
         'message': 'Trading stopped successfully'
     })
 
+# Alias endpoints for unified frontend compatibility
+@app.route('/api/start-automated-trading', methods=['POST'])
+@handle_errors
+def start_automated_trading_alias():
+    """Alias to start automated trading (compatibility)"""
+    return start_trading()
+
+@app.route('/api/stop-automated-trading', methods=['POST'])
+@handle_errors
+def stop_automated_trading_alias():
+    """Alias to stop automated trading (compatibility)"""
+    return stop_trading()
+
 @app.route('/api/status', methods=['GET'])
 @handle_errors
 def get_status():
@@ -610,6 +675,7 @@ def get_status():
         'connected': False,
         'positions': [],
         'account_info': None,
+        'trading_bots': {},
         'connection_details': {
             'has_bot_instance': bot_instance is not None,
             'has_mt5_connector': False,
@@ -666,6 +732,14 @@ def get_status():
                     status['account_info'] = None
                     status['connection_details']['connection_healthy'] = False
     
+    # Populate trading_bots summary
+    if trading_bots:
+        for sym, b in trading_bots.items():
+            status['trading_bots'][sym] = {
+                'connected': getattr(b, 'connected', False),
+                'last_analysis': b.last_analysis['timestamp'].isoformat() if getattr(b, 'last_analysis', None) else None
+            }
+
     return jsonify(status)
 
 @app.route('/api/positions', methods=['GET'])
@@ -682,6 +756,7 @@ def get_positions():
 
 @app.route('/api/close-positions', methods=['POST'])
 @handle_errors
+@require_api_key
 def close_positions():
     """Close all positions"""
     global bot_instance
@@ -695,6 +770,48 @@ def close_positions():
         'success': success,
         'message': 'Positions closed' if success else 'Failed to close positions'
     })
+
+@app.route('/api/open-position', methods=['POST'])
+@handle_errors
+@require_api_key
+def open_position():
+    """Open a manual position for a given symbol with type and optional sl/tp."""
+    global trading_bots, bot_instance
+    data = request.get_json() or {}
+    symbol = data.get('symbol')
+    order_type = data.get('type')  # BUY/SELL
+    volume = float(data.get('volume') or 0)
+    sl = data.get('sl')
+    tp = data.get('tp')
+
+    if symbol not in AVAILABLE_SYMBOLS:
+        return jsonify({'success': False, 'error': 'Invalid symbol'}), 400
+    if order_type not in ['BUY', 'SELL']:
+        return jsonify({'success': False, 'error': 'Invalid order type'}), 400
+    if volume <= 0:
+        return jsonify({'success': False, 'error': 'Volume must be greater than 0'}), 400
+    
+    b = trading_bots.get(symbol) or bot_instance
+    if not b or not b.connected or not b.mt5_connector:
+        return jsonify({'success': False, 'error': 'Not connected to MT5'}), 400
+
+    # Final volume validation
+    sym_info = b.mt5_connector.get_symbol_info(symbol)
+    if sym_info:
+        min_vol = sym_info.get('volume_min', 0.01)
+        max_vol = sym_info.get('volume_max', 100.0)
+        step = sym_info.get('volume_step', 0.01)
+        # Round to step
+        volume = round(volume / step) * step
+        if volume < min_vol or volume > max_vol:
+            return jsonify({'success': False, 'error': f'Volume out of range [{min_vol}, {max_vol}]'}), 400
+
+    # Place order
+    price = None  # market
+    result = b.mt5_connector.place_order(symbol, order_type, volume, price, sl, tp, comment='Manual Open from UI')
+    if result:
+        return jsonify({'success': True, 'order': result})
+    return jsonify({'success': False, 'error': 'Order placement failed'}), 400
 
 @app.route('/api/close-position/<int:ticket>', methods=['POST'])
 @handle_errors
@@ -970,31 +1087,33 @@ def run_trading_loop():
                         app_logger.error("No MT5 connector available. Stopping trading.")
                         break
                 
-                # Run analysis cycle
-                app_logger.info("Running market analysis...")
-                analysis = bot_instance.run_analysis_cycle()
+                # Run analysis cycle for selected symbols automatically
+                selected = bot_config.get('symbols_to_trade') or [bot_config.get('symbol', 'EURUSD')]
+                app_logger.info(f"Running market analysis for: {selected}")
+                for sym in selected:
+                    b = trading_bots.get(sym) or bot_instance
+                    if b.symbol != sym:
+                        b.symbol = sym
+                    analysis = b.run_analysis_cycle()
                 
-                if analysis:
-                    app_logger.info("Analysis completed successfully")
-                    
-                    # Generate trading signals if analysis is good
-                    signals = bot_instance.get_trading_signals(analysis)
-                    if signals and bot_instance.auto_trade:
-                        app_logger.info(f"Trading signal detected: {signals['signal_type']}")
-                        
-                        # Execute trade if conditions are met
-                        result = bot_instance.execute_trade(signals)
-                        if result:
-                            app_logger.info(f"Trade executed: Order #{result['order_id']}")
+                    if analysis:
+                        app_logger.info(f"Analysis completed for {sym}")
+                        # Generate trading signals if analysis is good
+                        signals = b.get_trading_signals(analysis)
+                        if signals and b.auto_trade:
+                            app_logger.info(f"Trading signal detected for {sym}: {signals['signal_type']}")
+                            result = b.execute_trade(signals)
+                            if result:
+                                app_logger.info(f"Trade executed for {sym}: Order #{result['order_id']}")
+                            else:
+                                app_logger.warning(f"Trade execution failed or skipped for {sym}")
                         else:
-                            app_logger.warning("Trade execution failed or skipped")
+                            if not signals:
+                                app_logger.info(f"No trading signals generated for {sym}")
+                            elif not b.auto_trade:
+                                app_logger.info(f"Auto trading disabled - signals not executed for {sym}")
                     else:
-                        if not signals:
-                            app_logger.info("No trading signals generated")
-                        elif not bot_instance.auto_trade:
-                            app_logger.info("Auto trading disabled - signals not executed")
-                else:
-                    app_logger.warning("Analysis failed this cycle")
+                        app_logger.warning(f"Analysis failed this cycle for {sym}")
                 
                 # Monitor existing positions
                 if bot_instance.connected:
@@ -1050,6 +1169,372 @@ def run_trading_loop():
                 app_logger.warning(f"Error closing positions: {close_error}")
         
         app_logger.info("Trading loop stopped")
+
+# ===== ENHANCED TRADING BOT ENDPOINTS =====
+
+@app.route('/api/enhanced/initialize', methods=['POST'])
+@handle_errors
+@validate_required_fields(['symbol', 'timeframe'])
+def initialize_enhanced_bot_endpoint():
+    """Initialize the enhanced trading bot"""
+    data = request.get_json()
+    symbol = data['symbol']
+    timeframe = data['timeframe']
+    market_type = data.get('market_type', 'forex')
+    enable_automation = data.get('enable_automation', True)
+    
+    app_logger.info(f"Initializing enhanced trading bot for {symbol} ({timeframe})")
+    
+    success = initialize_enhanced_bot(symbol, timeframe, market_type, enable_automation)
+    
+    if success:
+        return jsonify({
+            'success': True,
+            'message': f'Enhanced trading bot initialized for {symbol}',
+            'bot_status': enhanced_bot_instance.get_enhanced_status() if enhanced_bot_instance else None
+        })
+    else:
+        return jsonify({
+            'success': False,
+            'error': 'Failed to initialize enhanced trading bot'
+        }), 500
+
+@app.route('/api/enhanced/connect', methods=['POST'])
+@handle_errors
+def connect_enhanced_bot():
+    """Connect enhanced trading bot to MT5"""
+    if not enhanced_bot_instance:
+        return jsonify({
+            'success': False,
+            'error': 'Enhanced trading bot not initialized'
+        }), 400
+    
+    data = request.get_json() or {}
+    account_number = data.get('account_number')
+    password = data.get('password')
+    server = data.get('server')
+    
+    app_logger.info("Connecting enhanced trading bot to MT5")
+    
+    success = enhanced_bot_instance.connect_mt5(account_number, password, server)
+    
+    return jsonify({
+        'success': success,
+        'message': 'Connected to MT5' if success else 'Failed to connect to MT5',
+        'bot_status': enhanced_bot_instance.get_enhanced_status()
+    })
+
+@app.route('/api/enhanced/disconnect', methods=['POST'])
+@handle_errors
+def disconnect_enhanced_bot():
+    """Disconnect enhanced trading bot from MT5"""
+    if not enhanced_bot_instance:
+        return jsonify({
+            'success': False,
+            'error': 'Enhanced trading bot not initialized'
+        }), 400
+    
+    app_logger.info("Disconnecting enhanced trading bot from MT5")
+    enhanced_bot_instance.disconnect_mt5()
+    
+    return jsonify({
+        'success': True,
+        'message': 'Disconnected from MT5',
+        'bot_status': enhanced_bot_instance.get_enhanced_status()
+    })
+
+@app.route('/api/enhanced/analyze', methods=['POST'])
+@handle_errors
+def analyze_with_enhanced_bot():
+    """Run analysis with enhanced trading bot"""
+    if not enhanced_bot_instance:
+        return jsonify({
+            'success': False,
+            'error': 'Enhanced trading bot not initialized'
+        }), 400
+    
+    app_logger.info("Running analysis with enhanced trading bot")
+    
+    try:
+        # Fetch data and run analysis
+        enhanced_bot_instance.fetch_data()
+        trend_analysis = enhanced_bot_instance.identify_higher_highs_lows()
+        
+        if not trend_analysis:
+            return jsonify({
+                'success': False,
+                'error': 'No trend analysis available'
+            }), 400
+        
+        # Get trading signals
+        signals = enhanced_bot_instance.get_day_trading_signals(trend_analysis)
+        
+        result = {
+            'success': True,
+            'symbol': enhanced_bot_instance.symbol,
+            'timeframe': enhanced_bot_instance.period,
+            'market_type': enhanced_bot_instance.market_type,
+            'trend_analysis': trend_analysis,
+            'trading_signals': signals,
+            'bot_status': enhanced_bot_instance.get_enhanced_status()
+        }
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        app_logger.error(f"Error in enhanced analysis: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'Analysis failed: {str(e)}'
+        }), 500
+
+@app.route('/api/enhanced/automated-analysis', methods=['POST'])
+@handle_errors
+def run_automated_analysis():
+    """Run automated analysis cycle with enhanced trading bot"""
+    if not enhanced_bot_instance:
+        return jsonify({
+            'success': False,
+            'error': 'Enhanced trading bot not initialized'
+        }), 400
+    
+    app_logger.info("Running automated analysis cycle")
+    
+    try:
+        analysis_result = enhanced_bot_instance.run_automated_analysis_cycle()
+        
+        if not analysis_result:
+            return jsonify({
+                'success': False,
+                'error': 'Automated analysis failed'
+            }), 500
+        
+        return jsonify({
+            'success': True,
+            'analysis_result': analysis_result
+        })
+        
+    except Exception as e:
+        app_logger.error(f"Error in automated analysis: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'Automated analysis failed: {str(e)}'
+        }), 500
+
+@app.route('/api/enhanced/execute-trade', methods=['POST'])
+@handle_errors
+def execute_enhanced_trade():
+    """Execute trade with enhanced trading bot"""
+    if not enhanced_bot_instance:
+        return jsonify({
+            'success': False,
+            'error': 'Enhanced trading bot not initialized'
+        }), 400
+    
+    if not enhanced_bot_instance.connected:
+        return jsonify({
+            'success': False,
+            'error': 'Not connected to MT5'
+        }), 400
+    
+    data = request.get_json() or {}
+    signal = data.get('signal')
+    
+    if not signal:
+        return jsonify({
+            'success': False,
+            'error': 'No trading signal provided'
+        }), 400
+    
+    app_logger.info("Executing trade with enhanced trading bot")
+    
+    try:
+        result = enhanced_bot_instance.execute_automated_trade(signal)
+        
+        return jsonify({
+            'success': True,
+            'trade_result': result,
+            'bot_status': enhanced_bot_instance.get_enhanced_status()
+        })
+        
+    except Exception as e:
+        app_logger.error(f"Error executing trade: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'Trade execution failed: {str(e)}'
+        }), 500
+
+@app.route('/api/enhanced/start-automation', methods=['POST'])
+@handle_errors
+def start_enhanced_automation():
+    """Start automated trading with enhanced trading bot"""
+    if not enhanced_bot_instance:
+        return jsonify({
+            'success': False,
+            'error': 'Enhanced trading bot not initialized'
+        }), 400
+    
+    if not enhanced_bot_instance.connected:
+        return jsonify({
+            'success': False,
+            'error': 'Not connected to MT5'
+        }), 400
+    
+    data = request.get_json() or {}
+    interval_minutes = data.get('interval_minutes', 5)
+    max_cycles = data.get('max_cycles')
+    
+    app_logger.info(f"Starting enhanced automation (interval: {interval_minutes} minutes)")
+    
+    try:
+        success = enhanced_bot_instance.start_automated_trading()
+        
+        if success:
+            # Start automation in a separate thread
+            def run_automation():
+                enhanced_bot_instance.run_continuous_automation(interval_minutes, max_cycles)
+            
+            automation_thread = threading.Thread(target=run_automation, daemon=True)
+            automation_thread.start()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Automated trading started',
+                'bot_status': enhanced_bot_instance.get_enhanced_status()
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to start automated trading'
+            }), 500
+            
+    except Exception as e:
+        app_logger.error(f"Error starting automation: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'Failed to start automation: {str(e)}'
+        }), 500
+
+@app.route('/api/enhanced/stop-automation', methods=['POST'])
+@handle_errors
+def stop_enhanced_automation():
+    """Stop automated trading with enhanced trading bot"""
+    if not enhanced_bot_instance:
+        return jsonify({
+            'success': False,
+            'error': 'Enhanced trading bot not initialized'
+        }), 400
+    
+    app_logger.info("Stopping enhanced automation")
+    enhanced_bot_instance.stop_automated_trading()
+    
+    return jsonify({
+        'success': True,
+        'message': 'Automated trading stopped',
+        'bot_status': enhanced_bot_instance.get_enhanced_status()
+    })
+
+@app.route('/api/enhanced/status', methods=['GET'])
+@handle_errors
+def get_enhanced_status():
+    """Get enhanced trading bot status"""
+    if not enhanced_bot_instance:
+        return jsonify({
+            'success': False,
+            'error': 'Enhanced trading bot not initialized'
+        }), 400
+    
+    return jsonify({
+        'success': True,
+        'bot_status': enhanced_bot_instance.get_enhanced_status(),
+        'automation_summary': enhanced_bot_instance.get_automation_summary()
+    })
+
+@app.route('/api/enhanced/positions', methods=['GET'])
+@handle_errors
+def get_enhanced_positions():
+    """Get MT5 positions for enhanced trading bot"""
+    if not enhanced_bot_instance:
+        return jsonify({
+            'success': False,
+            'error': 'Enhanced trading bot not initialized'
+        }), 400
+    
+    try:
+        positions = enhanced_bot_instance.get_mt5_positions()
+        
+        return jsonify({
+            'success': True,
+            'positions': positions,
+            'count': len(positions)
+        })
+        
+    except Exception as e:
+        app_logger.error(f"Error getting positions: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'Failed to get positions: {str(e)}'
+        }), 500
+
+@app.route('/api/enhanced/close-position', methods=['POST'])
+@handle_errors
+@validate_required_fields(['ticket'])
+def close_enhanced_position():
+    """Close a specific MT5 position"""
+    if not enhanced_bot_instance:
+        return jsonify({
+            'success': False,
+            'error': 'Enhanced trading bot not initialized'
+        }), 400
+    
+    if not enhanced_bot_instance.connected:
+        return jsonify({
+            'success': False,
+            'error': 'Not connected to MT5'
+        }), 400
+    
+    data = request.get_json()
+    ticket = data['ticket']
+    
+    app_logger.info(f"Closing position {ticket}")
+    
+    try:
+        success = enhanced_bot_instance.close_mt5_position(ticket)
+        
+        return jsonify({
+            'success': success,
+            'message': f'Position {ticket} closed' if success else f'Failed to close position {ticket}',
+            'bot_status': enhanced_bot_instance.get_enhanced_status()
+        })
+        
+    except Exception as e:
+        app_logger.error(f"Error closing position: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'Failed to close position: {str(e)}'
+        }), 500
+
+@app.route('/api/enhanced/capabilities', methods=['GET'])
+@handle_errors
+def get_enhanced_capabilities():
+    """Get enhanced trading bot capabilities"""
+    return jsonify({
+        'success': True,
+        'capabilities': {
+            'manual_analysis': True,
+            'automated_trading': True,
+            'mt5_integration': True,
+            'multi_timeframe': True,
+            'risk_management': True,
+            'continuous_automation': True,
+            'position_management': True,
+            'market_types': ['stock', 'forex', 'crypto', 'commodities'],
+            'timeframes': ['1m', '5m', '15m', '30m', '1h', '4h', '1d']
+        },
+        'available_symbols': AVAILABLE_SYMBOLS,
+        'available_timeframes': AVAILABLE_TIMEFRAMES,
+        'market_types': MARKET_TYPES
+    })
 
 if __name__ == '__main__':
     # Create templates directory if it doesn't exist

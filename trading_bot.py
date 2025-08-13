@@ -6,12 +6,30 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 import warnings
+import os
+import logging
+from dotenv import load_dotenv
+import time
+
+# Import MT5 components for automated trading
+try:
+    from mt5_connector import MT5Connector
+    from mt5_trading_bot import MT5TradingBot
+    MT5_AVAILABLE = True
+except ImportError:
+    MT5_AVAILABLE = False
+    print("⚠️  MT5 components not available. Automated trading will be disabled.")
+
 warnings.filterwarnings('ignore')
 
+# Load environment variables
+load_dotenv()
+
 class TradingBot:
-    def __init__(self, symbol, period="1d", market_type="stock", account_size=10000, risk_per_trade=0.02):
+    def __init__(self, symbol, period="1d", market_type="stock", account_size=10000, risk_per_trade=0.02, 
+                 enable_automation=False, mt5_config=None):
         """
-        Initialize the day trading bot
+        Initialize the enhanced trading bot with automated trading support
         
         Args:
             symbol (str): Symbol (e.g., 'AAPL', 'BTC-USD', 'EURUSD=X')
@@ -19,6 +37,8 @@ class TradingBot:
             market_type (str): Type of market ('stock', 'crypto', 'forex')
             account_size (float): Total account size in USD
             risk_per_trade (float): Risk per trade as percentage of account (default 2%)
+            enable_automation (bool): Enable automated trading with MT5
+            mt5_config (dict): MT5 configuration for automated trading
         """
         self.symbol = symbol
         self.period = period
@@ -29,6 +49,22 @@ class TradingBot:
         self.pivot_points = None
         self.trendlines = None
         self.risk_reward_ratio = 3.0  # 1:3 risk-to-reward ratio
+        
+        # Automated trading components
+        self.enable_automation = enable_automation and MT5_AVAILABLE
+        self.mt5_connector = None
+        self.mt5_trading_bot = None
+        self.connected = False
+        self.automated_trading_active = False
+        
+        # MT5 configuration
+        self.mt5_config = mt5_config or {
+            'account_number': None,
+            'password': None,
+            'server': 'XMGlobal-Demo',
+            'use_ml': os.getenv('USE_ML', 'true').lower() == 'true',
+            'max_positions_per_symbol': int(os.getenv('MAX_POSITIONS_PER_SYMBOL', 3))
+        }
         
         # Multi-timeframe data for advanced analysis
         self.daily_data = None
@@ -82,6 +118,187 @@ class TradingBot:
             }
         }
         
+        # Initialize MT5 components if automation is enabled
+        if self.enable_automation:
+            self._initialize_mt5_components()
+    
+    def _initialize_mt5_components(self):
+        """Initialize MT5 trading bot (connector will be created during connection)"""
+        try:
+            self.mt5_trading_bot = MT5TradingBot(
+                symbol=self.symbol,
+                timeframe=self.period,
+                risk_per_trade=self.risk_per_trade,
+                use_ml=self.mt5_config['use_ml']
+            )
+            print(f"MT5 components initialized for {self.symbol}")
+        except Exception as e:
+            print(f"Failed to initialize MT5 components: {e}")
+            self.enable_automation = False
+    
+    def connect_mt5(self, account_number=None, password=None, server=None):
+        """
+        Connect to MT5 for automated trading
+        
+        Args:
+            account_number (str): MT5 account number
+            password (str): MT5 password
+            server (str): MT5 server
+            
+        Returns:
+            bool: True if connection successful, False otherwise
+        """
+        if not self.enable_automation:
+            print("❌ Automated trading is not enabled")
+            return False
+        
+        try:
+            account_number = account_number or self.mt5_config['account_number']
+            password = password or self.mt5_config['password']
+            server = server or self.mt5_config['server']
+            
+            if not account_number or not password:
+                print("❌ MT5 credentials not provided")
+                return False
+            
+            # Initialize MT5 connector with credentials
+            self.mt5_connector = MT5Connector(account_number, password, server)
+            self.connected = self.mt5_connector.connect()
+            
+            if self.connected:
+                print(f"Connected to MT5 for {self.symbol}")
+                # Update account size from MT5 balance
+                account_summary = self.mt5_connector.get_account_summary()
+                if account_summary:
+                    self.account_size = account_summary['balance']
+                    print(f"Account balance: ${account_summary['balance']:,.2f}")
+            else:
+                print(f"Failed to connect to MT5 for {self.symbol}")
+            
+            return self.connected
+            
+        except Exception as e:
+            print(f"Error connecting to MT5: {e}")
+            return False
+    
+    def disconnect_mt5(self):
+        """Disconnect from MT5"""
+        if self.mt5_connector:
+            self.mt5_connector.disconnect()
+            self.connected = False
+            self.automated_trading_active = False
+            print(f"🔌 Disconnected from MT5 for {self.symbol}")
+    
+    def start_automated_trading(self):
+        """Start automated trading for this symbol"""
+        if not self.enable_automation:
+            print("❌ Automated trading is not enabled")
+            return False
+        
+        if not self.connected:
+            print("❌ Not connected to MT5. Please connect first.")
+            return False
+        
+        try:
+            self.automated_trading_active = True
+            print(f"🤖 Started automated trading for {self.symbol}")
+            return True
+        except Exception as e:
+            print(f"❌ Error starting automated trading: {e}")
+            return False
+    
+    def stop_automated_trading(self):
+        """Stop automated trading for this symbol"""
+        self.automated_trading_active = False
+        print(f"🛑 Stopped automated trading for {self.symbol}")
+    
+    def execute_automated_trade(self, signal):
+        """
+        Execute a trade automatically using MT5
+        
+        Args:
+            signal (dict): Trading signal from analysis
+            
+        Returns:
+            dict: Trade execution result or None if failed
+        """
+        if not self.enable_automation or not self.connected:
+            print("❌ Automated trading not available")
+            return None
+        
+        try:
+            # Convert signal to MT5 format
+            mt5_signal = self._convert_signal_to_mt5(signal)
+            
+            # Execute trade using MT5 trading bot
+            result = self.mt5_trading_bot.execute_trade(mt5_signal)
+            
+            if result:
+                print(f"✅ Automated trade executed for {self.symbol}: {result}")
+            else:
+                print(f"❌ Automated trade failed for {self.symbol}")
+            
+            return result
+            
+        except Exception as e:
+            print(f"❌ Error executing automated trade: {e}")
+            return None
+    
+    def _convert_signal_to_mt5(self, signal):
+        """Convert yfinance signal to MT5 format"""
+        # This is a simplified conversion - you may need to adjust based on your MT5 bot's requirements
+        mt5_signal = {
+            'symbol': self.symbol,
+            'signal_type': signal.get('signal_type', 'BUY'),
+            'entry_price': signal.get('position_sizing', {}).get('entry_price', 0),
+            'stop_loss': signal.get('position_sizing', {}).get('stop_loss_price', 0),
+            'take_profit': signal.get('position_sizing', {}).get('target_price', 0),
+            'position_size': signal.get('position_sizing', {}).get('position_size', 0),
+            'confidence': signal.get('confidence', 0.5)
+        }
+        return mt5_signal
+    
+    def get_mt5_positions(self):
+        """Get current MT5 positions for this symbol"""
+        if not self.enable_automation or not self.connected:
+            return []
+        
+        try:
+            positions = self.mt5_connector.get_positions()
+            symbol_positions = [p for p in positions if p.get('symbol') == self.symbol] if positions else []
+            return symbol_positions
+        except Exception as e:
+            print(f"❌ Error getting MT5 positions: {e}")
+            return []
+    
+    def close_mt5_position(self, ticket):
+        """Close a specific MT5 position"""
+        if not self.enable_automation or not self.connected:
+            return False
+        
+        try:
+            result = self.mt5_connector.close_position(ticket)
+            if result:
+                print(f"✅ Closed position {ticket} for {self.symbol}")
+            else:
+                print(f"❌ Failed to close position {ticket} for {self.symbol}")
+            return result
+        except Exception as e:
+            print(f"❌ Error closing MT5 position: {e}")
+            return False
+    
+    def get_automation_status(self):
+        """Get automation status and capabilities"""
+        return {
+            'automation_enabled': self.enable_automation,
+            'mt5_available': MT5_AVAILABLE,
+            'connected': self.connected,
+            'automated_trading_active': self.automated_trading_active,
+            'symbol': self.symbol,
+            'market_type': self.market_type,
+            'timeframe': self.period
+        }
+    
     def get_full_symbol(self):
         """Get the full symbol for the given market type"""
         if self.market_type == 'crypto' and self.symbol in self.symbol_mappings['crypto']:
@@ -1268,7 +1485,7 @@ class TradingBot:
             
             if not primary_analysis or not primary_analysis.get('uptrend_confirmed', False):
                 print("❌ Neither Weekly nor Daily timeframe confirms uptrend")
-                print(f"   Weekly HH: {self.identify_higher_highs_lows_advanced(self.weekly_data, min_points=2)['hh_count'] if self.weekly_data is not None else 0}")
+                print(f"   Weekly HH: {self.identify_higher_highs_lows_advanced(self.weekly_data, min_points=2).get('hh_count', 0) if self.weekly_data is not None else 0}")
                 print(f"   Weekly HL: {self.identify_higher_highs_lows_advanced(self.weekly_data, min_points=2)['hl_count'] if self.weekly_data is not None else 0}")
                 print(f"   Daily HH: {primary_analysis.get('hh_count', 0) if primary_analysis else 0}")
                 print(f"   Daily HL: {primary_analysis.get('hl_count', 0) if primary_analysis else 0}")
@@ -1464,11 +1681,11 @@ class TradingBot:
             if trend_analysis['uptrend_confirmed']:
                 self.create_trendlines(trend_analysis)
                 print(f"✅ UPTREND CONFIRMED for {self.symbol} ({self.market_type}) on {self.period} timeframe")
-                print(f"   Higher Highs: {trend_analysis['hh_count']}")
+                print(f"   Higher Highs: {trend_analysis.get('hh_count', 0)}")
                 print(f"   Higher Lows: {trend_analysis['hl_count']}")
             else:
                 print(f"❌ No uptrend confirmed for {self.symbol} ({self.market_type}) on {self.period} timeframe")
-                print(f"   Higher Highs: {trend_analysis['hh_count']}")
+                print(f"   Higher Highs: {trend_analysis.get('hh_count', 0)}")
                 print(f"   Higher Lows: {trend_analysis['hl_count']}")
         else:
             print(f"❌ Cannot analyze trends for {self.symbol} ({self.market_type}) on {self.period} timeframe - insufficient data")
@@ -1557,7 +1774,7 @@ class TradingBot:
             active_analysis = uptrend_analysis
             active_analysis['trend_type'] = 'uptrend'
             print(f"✅ UPTREND CONFIRMED for {self.symbol} ({self.market_type}) on {self.period} timeframe")
-            print(f"   Higher Highs: {uptrend_analysis['hh_count']}")
+            print(f"   Higher Highs: {uptrend_analysis.get('hh_count', 0)}")
             print(f"   Higher Lows: {uptrend_analysis['hl_count']}")
         elif downtrend_strength > uptrend_strength and downtrend_strength >= 4:
             trend_direction = "DOWNTREND"
@@ -1746,11 +1963,11 @@ class TradingBot:
         print(f"Pivot Points Found: {len(self.pivot_points) if self.pivot_points is not None else 0}")
         
         print(f"\nUPTREND ANALYSIS:")
-        print(f"  Higher Highs (HH): {trend_analysis['hh_count']}")
-        print(f"  Higher Lows (HL): {trend_analysis['hl_count']}")
-        print(f"  Uptrend Confirmed: {'✅ YES' if trend_analysis['uptrend_confirmed'] else '❌ NO'}")
+        print(f"  Higher Highs (HH): {trend_analysis.get('hh_count', 0)}")
+        print(f"  Higher Lows (HL): {trend_analysis.get('hl_count', 0)}")
+        print(f"  Uptrend Confirmed: {'✅ YES' if trend_analysis.get('uptrend_confirmed', False) else '❌ NO'}")
         
-        if trend_analysis['uptrend_confirmed']:
+        if trend_analysis.get('uptrend_confirmed', False):
             print(f"\n✅ TRADING SIGNAL: UPTREND DETECTED on {self.period} timeframe")
             print(f"   The {self.market_type} market is showing a confirmed uptrend with:")
             print(f"   - At least 2 higher highs (HH)")
@@ -1821,4 +2038,268 @@ class TradingBot:
     
     def get_available_timeframes(self):
         """Get list of available timeframes for day trading"""
-        return self.valid_timeframes 
+        return self.valid_timeframes
+    
+    # ===== AUTOMATED TRADING METHODS =====
+    
+    def run_automated_analysis_cycle(self):
+        """
+        Run a complete automated analysis cycle for this symbol
+        
+        Returns:
+            dict: Analysis results with trading signals
+        """
+        try:
+            print(f"🤖 Running automated analysis cycle for {self.symbol}")
+            
+            # Fetch latest data
+            self.fetch_data()
+            
+            # Run trend analysis
+            trend_analysis = self.identify_higher_highs_lows()
+            
+            if not trend_analysis:
+                print(f"❌ No trend analysis available for {self.symbol}")
+                return None
+            
+            # Get trading signals
+            signals = self.get_day_trading_signals(trend_analysis)
+            
+            # Add automation status
+            result = {
+                'symbol': self.symbol,
+                'timeframe': self.period,
+                'market_type': self.market_type,
+                'timestamp': datetime.now().isoformat(),
+                'trend_analysis': trend_analysis,
+                'trading_signals': signals,
+                'automation_status': self.get_automation_status(),
+                'mt5_positions': self.get_mt5_positions() if self.enable_automation else []
+            }
+            
+            print(f"✅ Automated analysis completed for {self.symbol}")
+            return result
+            
+        except Exception as e:
+            print(f"❌ Error in automated analysis cycle for {self.symbol}: {e}")
+            return None
+    
+    def execute_automated_trading_decision(self, analysis_result):
+        """
+        Execute trading decision based on analysis results
+        
+        Args:
+            analysis_result (dict): Result from run_automated_analysis_cycle
+            
+        Returns:
+            dict: Trading execution result
+        """
+        if not self.enable_automation or not self.connected:
+            print(f"❌ Automated trading not available for {self.symbol}")
+            return None
+        
+        try:
+            signals = analysis_result.get('trading_signals')
+            if not signals:
+                print(f"ℹ️  No trading signals for {self.symbol}")
+                return None
+            
+            # Check if we should execute the trade
+            if self._should_execute_trade(signals, analysis_result):
+                result = self.execute_automated_trade(signals)
+                return {
+                    'symbol': self.symbol,
+                    'executed': True,
+                    'result': result,
+                    'timestamp': datetime.now().isoformat()
+                }
+            else:
+                print(f"ℹ️  Trade conditions not met for {self.symbol}")
+                return {
+                    'symbol': self.symbol,
+                    'executed': False,
+                    'reason': 'Trade conditions not met',
+                    'timestamp': datetime.now().isoformat()
+                }
+                
+        except Exception as e:
+            print(f"❌ Error executing trading decision for {self.symbol}: {e}")
+            return None
+    
+    def _should_execute_trade(self, signals, analysis_result):
+        """
+        Determine if a trade should be executed based on signals and current conditions
+        
+        Args:
+            signals (dict): Trading signals
+            analysis_result (dict): Complete analysis result
+            
+        Returns:
+            bool: True if trade should be executed
+        """
+        try:
+            # Check if we have valid signals
+            if not signals or not signals.get('position_sizing'):
+                return False
+            
+            # Check current positions
+            current_positions = self.get_mt5_positions()
+            max_positions = self.mt5_config.get('max_positions_per_symbol', 3)
+            
+            if len(current_positions) >= max_positions:
+                print(f"ℹ️  Maximum positions reached for {self.symbol} ({len(current_positions)}/{max_positions})")
+                return False
+            
+            # Check signal confidence (if available)
+            confidence = signals.get('confidence', 0.5)
+            min_confidence = 0.7  # 70% confidence threshold
+            
+            if confidence < min_confidence:
+                print(f"ℹ️  Signal confidence too low for {self.symbol} ({confidence:.2%} < {min_confidence:.2%})")
+                return False
+            
+            # Check trend confirmation
+            trend_analysis = analysis_result.get('trend_analysis', {})
+            if not trend_analysis.get('uptrend_confirmed', False):
+                print(f"ℹ️  No confirmed uptrend for {self.symbol}")
+                return False
+            
+            print(f"✅ Trade conditions met for {self.symbol}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error checking trade conditions for {self.symbol}: {e}")
+            return False
+    
+    def get_enhanced_status(self):
+        """
+        Get comprehensive status including both manual and automated trading capabilities
+        
+        Returns:
+            dict: Complete status information
+        """
+        status = {
+            'symbol': self.symbol,
+            'market_type': self.market_type,
+            'timeframe': self.period,
+            'account_size': self.account_size,
+            'risk_per_trade': self.risk_per_trade,
+            'data_loaded': self.data is not None,
+            'data_points': len(self.data) if self.data is not None else 0,
+            'automation': self.get_automation_status(),
+            'capabilities': {
+                'manual_analysis': True,
+                'automated_trading': self.enable_automation,
+                'mt5_integration': MT5_AVAILABLE,
+                'multi_timeframe': True,
+                'risk_management': True
+            }
+        }
+        
+        # Add MT5-specific information if available
+        if self.enable_automation and self.connected:
+            try:
+                balance = self.mt5_connector.get_balance()
+                equity = self.mt5_connector.get_equity()
+                positions = self.get_mt5_positions()
+                
+                status['mt5_info'] = {
+                    'balance': balance,
+                    'equity': equity,
+                    'open_positions': len(positions),
+                    'positions': positions
+                }
+            except Exception as e:
+                status['mt5_info'] = {'error': str(e)}
+        
+        return status
+    
+    def run_continuous_automation(self, interval_minutes=5, max_cycles=None):
+        """
+        Run continuous automated trading with periodic analysis
+        
+        Args:
+            interval_minutes (int): Minutes between analysis cycles
+            max_cycles (int): Maximum number of cycles (None for unlimited)
+        """
+        if not self.enable_automation:
+            print("❌ Automated trading is not enabled")
+            return
+        
+        if not self.connected:
+            print("❌ Not connected to MT5. Please connect first.")
+            return
+        
+        print(f"🤖 Starting continuous automation for {self.symbol}")
+        print(f"   Analysis interval: {interval_minutes} minutes")
+        print(f"   Max cycles: {max_cycles if max_cycles else 'Unlimited'}")
+        
+        cycle_count = 0
+        self.automated_trading_active = True
+        
+        try:
+            while self.automated_trading_active and self.connected:
+                cycle_count += 1
+                
+                if max_cycles and cycle_count > max_cycles:
+                    print(f"🛑 Reached maximum cycles ({max_cycles}) for {self.symbol}")
+                    break
+                
+                print(f"\n🔄 Cycle {cycle_count} for {self.symbol} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                
+                # Run analysis cycle
+                analysis_result = self.run_automated_analysis_cycle()
+                
+                if analysis_result:
+                    # Execute trading decision
+                    trading_result = self.execute_automated_trading_decision(analysis_result)
+                    
+                    if trading_result and trading_result.get('executed'):
+                        print(f"✅ Trade executed in cycle {cycle_count}")
+                    else:
+                        print(f"ℹ️  No trade executed in cycle {cycle_count}")
+                else:
+                    print(f"❌ Analysis failed in cycle {cycle_count}")
+                
+                # Wait for next cycle
+                if self.automated_trading_active:
+                    print(f"⏳ Waiting {interval_minutes} minutes for next cycle...")
+                    for i in range(interval_minutes * 60):
+                        if not self.automated_trading_active:
+                            break
+                        time.sleep(1)
+        
+        except KeyboardInterrupt:
+            print(f"\n🛑 Continuous automation interrupted for {self.symbol}")
+        except Exception as e:
+            print(f"❌ Error in continuous automation for {self.symbol}: {e}")
+        finally:
+            self.automated_trading_active = False
+            print(f"🛑 Continuous automation stopped for {self.symbol}")
+    
+    def get_automation_summary(self):
+        """
+        Get a summary of automation capabilities and status
+        
+        Returns:
+            dict: Automation summary
+        """
+        return {
+            'symbol': self.symbol,
+            'automation_enabled': self.enable_automation,
+            'mt5_available': MT5_AVAILABLE,
+            'connected': self.connected,
+            'automated_trading_active': self.automated_trading_active,
+            'capabilities': {
+                'manual_analysis': True,
+                'automated_trading': self.enable_automation,
+                'continuous_automation': self.enable_automation,
+                'position_management': self.enable_automation,
+                'risk_management': True
+            },
+            'configuration': {
+                'risk_per_trade': self.risk_per_trade,
+                'max_positions': self.mt5_config.get('max_positions_per_symbol', 3),
+                'use_ml': self.mt5_config.get('use_ml', False)
+            }
+        }

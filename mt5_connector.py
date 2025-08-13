@@ -8,18 +8,25 @@ for executing trades on XM trading account.
 """
 
 import MetaTrader5 as mt5
+import logging
+import time as _time
+import math
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import time
 import os
 from dotenv import load_dotenv
+from utils.backoff import backoff
 
 # Load environment variables
 load_dotenv()
 
+from typing import Any, Dict, List, Optional, Tuple
+
+
 class MT5Connector:
-    def __init__(self, account_number=None, password=None, server=None):
+    def __init__(self, account_number: Optional[str] = None, password: Optional[str] = None, server: Optional[str] = None) -> None:
         """
         Initialize MT5 connector for XM trading account
         
@@ -28,11 +35,17 @@ class MT5Connector:
             password (str): XM account password
             server (str): XM server name (e.g., 'XMGlobal-Demo' for demo, 'XMGlobal-Live' for live)
         """
-        self.account_number = account_number or os.getenv('XM_ACCOUNT_NUMBER')
-        self.password = password or os.getenv('XM_PASSWORD')
-        self.server = server or os.getenv('XM_SERVER', 'XMGlobal-Demo')
+        self.account_number = account_number
+        self.password = password
+        self.server = server or 'XMGlobal-Demo'
         self.connected = False
         self.account_info = None
+        self.last_error = None
+        # Caching for performance (symbol info and ticks)
+        self._cache = {}
+        self.cache_ttl_seconds = 1.0
+        # Logger
+        self.logger = logging.getLogger('mt5_connector')
         
         # XM specific settings
         self.xm_settings = {
@@ -46,7 +59,7 @@ class MT5Connector:
             }
         }
         
-    def connect(self):
+    def connect(self) -> bool:
         """
         Connect to MetaTrader 5 with XM account credentials
         
@@ -56,7 +69,8 @@ class MT5Connector:
         try:
             # Initialize MT5
             if not mt5.initialize():
-                print(f"❌ MT5 initialization failed: {mt5.last_error()}")
+                self.last_error = mt5.last_error()
+                self.logger.error(f"MT5 initialization failed: {self.last_error}")
                 return False
             
             # Login to XM account
@@ -65,26 +79,20 @@ class MT5Connector:
                 password=self.password,
                 server=self.server
             ):
-                print(f"❌ MT5 login failed: {mt5.last_error()}")
-                print(f"   Account: {self.account_number}")
-                print(f"   Server: {self.server}")
+                self.last_error = mt5.last_error()
+                self.logger.error(f"MT5 login failed: {self.last_error} | account={self.account_number} server={self.server}")
                 return False
             
             # Get account info
             self.account_info = mt5.account_info()
             if self.account_info is None:
-                print("❌ Failed to get account information")
+                self.logger.error("Failed to get account information")
                 return False
             
             self.connected = True
             
-            print("✅ Successfully connected to XM trading account")
-            print(f"   Account: {self.account_info.login}")
-            print(f"   Server: {self.account_info.server}")
-            print(f"   Balance: ${self.account_info.balance:.2f}")
-            print(f"   Equity: ${self.account_info.equity:.2f}")
-            print(f"   Margin: ${self.account_info.margin:.2f}")
-            print(f"   Free Margin: ${self.account_info.margin_free:.2f}")
+            self.logger.info("Successfully connected to XM trading account")
+            self.logger.info(f"Login={self.account_info.login} Server={self.account_info.server} Balance=${self.account_info.balance:.2f} Equity=${self.account_info.equity:.2f} Margin=${self.account_info.margin:.2f} FreeMargin=${self.account_info.margin_free:.2f}")
             
             # Check AutoTrading status
             self.check_autotrading_enabled()
@@ -92,17 +100,23 @@ class MT5Connector:
             return True
             
         except Exception as e:
-            print(f"❌ Connection error: {e}")
+            self.last_error = str(e)
+            self.logger.exception(f"Connection error: {e}")
             return False
+
+    def get_last_error(self) -> Optional[Any]:
+        """Return the last MT5 error encountered during connect/login."""
+        return self.last_error
     
-    def disconnect(self):
+    def disconnect(self) -> None:
         """Disconnect from MetaTrader 5"""
         if self.connected:
             mt5.shutdown()
             self.connected = False
-            print("✅ Disconnected from MT5")
+            self.logger.info("Disconnected from MT5")
     
-    def get_symbol_info(self, symbol):
+    @backoff(retries=3, base_delay_seconds=0.2, max_delay_seconds=1.5)
+    def get_symbol_info(self, symbol: str) -> Optional[Dict[str, Any]]:
         """
         Get symbol information for trading
         
@@ -113,20 +127,26 @@ class MT5Connector:
             dict: Symbol information or None if failed
         """
         if not self.connected:
-            print("❌ Not connected to MT5")
+            self.logger.error("Not connected to MT5")
             return None
         
         try:
+            # Cache lookup
+            cache_key = f"symbol_info:{symbol}"
+            cached = self._cache.get(cache_key)
+            now = _time.time()
+            if cached and (now - cached['ts'] < self.cache_ttl_seconds):
+                return cached['value']
             # Get symbol info
             symbol_info = mt5.symbol_info(symbol)
             if symbol_info is None:
-                print(f"❌ Symbol {symbol} not found")
+                self.logger.error(f"Symbol {symbol} not found")
                 return None
             
             # Enable symbol for trading
             if not symbol_info.visible:
                 if not mt5.symbol_select(symbol, True):
-                    print(f"❌ Failed to select symbol {symbol}")
+                    self.logger.error(f"Failed to select symbol {symbol}")
                     return None
             
             # Create info dict with safe attribute access
@@ -152,13 +172,121 @@ class MT5Connector:
                 contract_size = getattr(symbol_info, 'trade_contract_size', 100000)
                 info['tick_value'] = info['point'] * contract_size
             
+            # Store in cache
+            self._cache[cache_key] = {'value': info, 'ts': now}
             return info
             
         except Exception as e:
-            print(f"❌ Error getting symbol info: {e}")
+            self.logger.exception(f"Error getting symbol info: {e}")
             return None
+
+    def get_pip_value_per_lot(self, symbol: str) -> float:
+        """
+        Compute pip value per 1.00 lot for the given symbol using MT5 tick data.
+        Falls back to $10 per pip per lot for most FX majors if unavailable.
+        """
+        try:
+            info = self.get_symbol_info(symbol)
+            if not info:
+                return 10.0
+            # Determine pip size
+            pip_size = 0.01 if 'JPY' in symbol.upper() else 0.0001
+            tick_size = info.get('tick_size', 0.00001)
+            # Obtain tick_value using MT5 symbol_info as it reflects value per tick for 1 lot
+            si = mt5.symbol_info(symbol)
+            tick_value = getattr(si, 'tick_value', None)
+            if tick_value is None or tick_value <= 0 or tick_size <= 0:
+                return 10.0
+            # Scale pip value from tick value
+            pip_value_per_lot = tick_value * (pip_size / tick_size)
+            # Sanity bounds
+            if pip_value_per_lot <= 0:
+                return 10.0
+            return pip_value_per_lot
+        except Exception:
+            return 10.0
+
+    def calculate_position_size_robust(self, symbol: str, order_type: str, risk_percent: float, entry_price: float, stop_loss_price: float, margin_buffer: float = 0.95) -> float:
+        """
+        Calculate a safe position size constrained by risk amount and free margin.
+
+        Args:
+            symbol (str): Trading symbol (e.g., 'EURUSD')
+            order_type (str): 'BUY' or 'SELL'
+            risk_percent (float): Fraction of balance to risk (e.g., 0.02)
+            entry_price (float): Proposed entry price
+            stop_loss_price (float): Proposed stop loss price
+            margin_buffer (float): Fraction of free margin allowed to be used (e.g., 0.95)
+
+        Returns:
+            float: volume in lots (rounded to step), or 0.0 if cannot open safely
+        """
+        try:
+            info = self.get_symbol_info(symbol)
+            if not info or entry_price is None or stop_loss_price is None:
+                return 0.0
+
+            # Get account summary
+            acct = self.get_account_summary() if hasattr(self, 'get_account_summary') else None
+            if not acct:
+                return 0.0
+            balance = float(acct.get('balance', 0) or 0)
+            free_margin = float(acct.get('margin_free', 0) or 0)
+
+            # Pip computations
+            pip_size = 0.01 if 'JPY' in symbol.upper() else 0.0001
+            pip_value_per_lot = self.get_pip_value_per_lot(symbol)
+            stop_loss_pips = abs(entry_price - stop_loss_price) / pip_size
+            if stop_loss_pips <= 0:
+                # Fallback to min volume
+                return max(info.get('volume_min', 0.01), 0.01)
+
+            # Risk-based volume
+            risk_amount = balance * float(risk_percent)
+            if risk_amount <= 0:
+                return 0.0
+            vol_by_risk = risk_amount / (stop_loss_pips * pip_value_per_lot)
+
+            # Apply broker constraints
+            min_vol = info.get('volume_min', 0.01)
+            max_vol = info.get('volume_max', 100.0)
+            step = info.get('volume_step', 0.01)
+
+            def round_to_step(v):
+                return max(min_vol, min(max_vol, round(v / step) * step))
+
+            vol_by_risk = round_to_step(vol_by_risk)
+
+            # Margin constraint using order_calc_margin
+            order_const = mt5.ORDER_TYPE_BUY if str(order_type).upper() == 'BUY' else mt5.ORDER_TYPE_SELL
+            tick = mt5.symbol_info_tick(symbol)
+            ref_price = getattr(tick, 'ask', None) if order_const == mt5.ORDER_TYPE_BUY else getattr(tick, 'bid', None)
+            if ref_price is None:
+                ref_price = entry_price
+
+            # Margin per lot
+            margin_one = mt5.order_calc_margin(order_const, symbol, 1.0, ref_price)
+            max_by_margin = None
+            if margin_one is not None and margin_one > 0:
+                max_by_margin = math.floor(((free_margin * margin_buffer) / margin_one) / step) * step
+                max_by_margin = round_to_step(max_by_margin)
+
+            if max_by_margin is not None:
+                volume = min(vol_by_risk, max_by_margin)
+            else:
+                volume = vol_by_risk
+
+            # Ensure not below min lot due to constraints
+            if volume < min_vol:
+                return 0.0
+
+            return round_to_step(volume)
+        except Exception as e:
+            self.logger.exception(f"Error in robust position sizing: {e}")
+            return 0.0
     
-    def get_historical_data(self, symbol, timeframe, count=1000):
+    @backoff(retries=2, base_delay_seconds=0.5, max_delay_seconds=2.0)
+    def get_historical_data(self, symbol: str, timeframe: str, count: int = 1000) -> Optional[pd.DataFrame]:
         """
         Get historical data from MT5
         
@@ -171,7 +299,7 @@ class MT5Connector:
             pd.DataFrame: Historical data or None if failed
         """
         if not self.connected:
-            print("❌ Not connected to MT5")
+            self.logger.error("Not connected to MT5")
             return None
         
         try:
@@ -183,7 +311,7 @@ class MT5Connector:
             # Get historical data
             rates = mt5.copy_rates_from_pos(symbol, mt5_timeframe, 0, count)
             if rates is None:
-                print(f"❌ Failed to get historical data for {symbol}")
+                self.logger.error(f"Failed to get historical data for {symbol}")
                 return None
             
             # Convert to DataFrame
@@ -215,21 +343,20 @@ class MT5Connector:
                         # If volume is missing, add a default volume
                         df['Volume'] = 1000
                     else:
-                        print(f"❌ Missing required column: {col}")
+                        self.logger.error(f"Missing required column: {col}")
                         return None
             
             # Sort by date to ensure chronological order
             df = df.sort_values('Date').reset_index(drop=True)
             
-            print(f"✅ Got {len(df)} data points for {symbol} on {timeframe} timeframe")
-            print(f"   Columns: {list(df.columns)}")
+            self.logger.debug(f"Got {len(df)} data points for {symbol} on {timeframe} timeframe | Columns: {list(df.columns)}")
             return df
             
         except Exception as e:
-            print(f"❌ Error getting historical data: {e}")
+            self.logger.exception(f"Error getting historical data: {e}")
             return None
     
-    def convert_timeframe(self, timeframe):
+    def convert_timeframe(self, timeframe: str) -> Optional[int]:
         """
         Convert timeframe string to MT5 timeframe constant
         
@@ -251,7 +378,8 @@ class MT5Connector:
         
         return timeframe_map.get(timeframe)
     
-    def get_current_price(self, symbol):
+    @backoff(retries=2, base_delay_seconds=0.2, max_delay_seconds=1.0)
+    def get_current_price(self, symbol: str) -> Optional[Dict[str, Any]]:
         """
         Get current market price for a symbol
         
@@ -265,23 +393,32 @@ class MT5Connector:
             return None
         
         try:
+            # Cache lookup
+            cache_key = f"tick:{symbol}"
+            cached = self._cache.get(cache_key)
+            now = _time.time()
+            if cached and (now - cached['ts'] < self.cache_ttl_seconds):
+                return cached['value']
             tick = mt5.symbol_info_tick(symbol)
             if tick is None:
                 return None
             
-            return {
+            value = {
                 'bid': tick.bid,
                 'ask': tick.ask,
                 'last': tick.last,
                 'volume': tick.volume,
                 'time': tick.time
             }
+            # Store in cache
+            self._cache[cache_key] = {'value': value, 'ts': now}
+            return value
             
         except Exception as e:
-            print(f"❌ Error getting current price: {e}")
+            self.logger.exception(f"Error getting current price: {e}")
             return None
     
-    def validate_stop_levels(self, symbol, entry_price, sl=None, tp=None):
+    def validate_stop_levels(self, symbol: str, entry_price: float, sl: Optional[float] = None, tp: Optional[float] = None) -> Tuple[Optional[float], Optional[float]]:
         """
         Validate and adjust stop loss and take profit levels
         
@@ -298,13 +435,13 @@ class MT5Connector:
             # Get symbol info
             symbol_info = self.get_symbol_info(symbol)
             if symbol_info is None:
-                print("❌ Could not get symbol info")
+                self.logger.error("Could not get symbol info")
                 return None, None
             
             # Get current market price
             current_prices = self.get_current_price(symbol)
             if current_prices is None:
-                print("❌ Could not get current prices")
+                self.logger.error("Could not get current prices")
                 return None, None
             
             # Use appropriate price based on order type
@@ -318,7 +455,7 @@ class MT5Connector:
             try:
                 symbol_info_raw = mt5.symbol_info(symbol)
                 if symbol_info_raw is None:
-                    print("❌ Could not get raw symbol info")
+                    self.logger.error("Could not get raw symbol info")
                     return None, None
                 
                 stop_level_points = symbol_info_raw.trade_stops_level
@@ -326,17 +463,15 @@ class MT5Connector:
                 point = symbol_info_raw.point
                 min_distance = stop_level_points * point  # This is in price units
                 
-                print(f"   📊 Broker stop level: {stop_level_points} points")
-                print(f"   📊 Point value: {point}")
-                print(f"   📊 Min distance: {min_distance:.5f}")
+                self.logger.debug(f"Broker stop level: {stop_level_points} points | point={point} | min_distance={min_distance:.5f}")
                 
                 # If min_distance is 0, use a reasonable default
                 if min_distance == 0:
                     min_distance = 0.00050  # 50 pips for major pairs (more conservative)
-                    print(f"   ⚠️  Using default minimum distance: {min_distance:.5f}")
+                    self.logger.warning(f"Using default minimum distance: {min_distance:.5f}")
                 
             except Exception as e:
-                print(f"   ⚠️  Error getting broker stop level: {e}")
+                self.logger.warning(f"Error getting broker stop level: {e}")
                 # Fallback to symbol_info dict
                 min_stop_level = symbol_info.get('trade_stops_level', 10)
                 point = symbol_info['point']
@@ -344,18 +479,12 @@ class MT5Connector:
                 
                 if min_distance == 0:
                     min_distance = 0.00050  # 50 pips for major pairs (more conservative)
-                    print(f"   ⚠️  Using fallback minimum distance: {min_distance:.5f}")
+                    self.logger.warning(f"Using fallback minimum distance: {min_distance:.5f}")
             
             # Add extra buffer for safety (200% more than minimum for extra safety)
             safe_distance = min_distance * 3.0
             
-            print(f"\n🔍 STOP LEVEL VALIDATION:")
-            print(f"   Symbol: {symbol}")
-            print(f"   Current Price: {current_price:.5f}")
-            print(f"   Min Stop Level: {min_stop_level} points")
-            print(f"   Point Value: {point}")
-            print(f"   Min Distance: {min_distance:.5f}")
-            print(f"   Safe Distance: {safe_distance:.5f}")
+            self.logger.debug(f"STOP LEVEL VALIDATION | symbol={symbol} current={current_price:.5f} min_stop_level={min_stop_level} point={point} min_dist={min_distance:.5f} safe={safe_distance:.5f}")
             
             adjusted_sl = sl
             adjusted_tp = tp
@@ -363,7 +492,7 @@ class MT5Connector:
             # Validate stop loss
             if sl is not None:
                 sl_distance = abs(current_price - sl)
-                print(f"   Original SL: {sl:.5f} (distance: {sl_distance:.5f})")
+                self.logger.debug(f"Original SL: {sl:.5f} (distance: {sl_distance:.5f})")
                 
                 if sl_distance < safe_distance:
                     # Adjust stop loss to safe distance
@@ -371,14 +500,14 @@ class MT5Connector:
                         adjusted_sl = current_price - safe_distance
                     else:  # Stop loss above current price (for SELL)
                         adjusted_sl = current_price + safe_distance
-                    print(f"   ⚠️  Stop loss adjusted to safe distance: {adjusted_sl:.5f}")
+                        self.logger.warning(f"Stop loss adjusted to safe distance: {adjusted_sl:.5f}")
                 else:
-                    print(f"   ✅ Stop loss is valid")
+                    self.logger.debug("Stop loss is valid")
             
             # Validate take profit
             if tp is not None:
                 tp_distance = abs(current_price - tp)
-                print(f"   Original TP: {tp:.5f} (distance: {tp_distance:.5f})")
+                self.logger.debug(f"Original TP: {tp:.5f} (distance: {tp_distance:.5f})")
                 
                 if tp_distance < safe_distance:
                     # Adjust take profit to safe distance
@@ -386,19 +515,17 @@ class MT5Connector:
                         adjusted_tp = current_price + safe_distance
                     else:  # Take profit below current price (for SELL)
                         adjusted_tp = current_price - safe_distance
-                    print(f"   ⚠️  Take profit adjusted to safe distance: {adjusted_tp:.5f}")
+                    self.logger.warning(f"Take profit adjusted to safe distance: {adjusted_tp:.5f}")
                 else:
-                    print(f"   ✅ Take profit is valid")
+                    self.logger.debug("Take profit is valid")
             
             return adjusted_sl, adjusted_tp
             
         except Exception as e:
-            print(f"❌ Error validating stop levels: {e}")
-            import traceback
-            traceback.print_exc()
+            self.logger.exception(f"Error validating stop levels: {e}")
             return None, None
     
-    def get_symbol_stop_info(self, symbol):
+    def get_symbol_stop_info(self, symbol: str) -> Optional[Dict[str, Any]]:
         """
         Get detailed symbol stop level information
         
@@ -457,10 +584,10 @@ class MT5Connector:
             }
             
         except Exception as e:
-            print(f"❌ Error getting symbol stop info: {e}")
+            self.logger.exception(f"Error getting symbol stop info: {e}")
             return None
     
-    def get_terminal_info(self):
+    def get_terminal_info(self) -> Optional[Dict[str, Any]]:
         """
         Get MT5 terminal information
         
@@ -490,7 +617,7 @@ class MT5Connector:
             print(f"❌ Error getting terminal info: {e}")
             return None
     
-    def check_autotrading_enabled(self):
+    def check_autotrading_enabled(self) -> bool:
         """
         Check if AutoTrading is enabled in MT5
         
@@ -498,7 +625,7 @@ class MT5Connector:
             bool: True if AutoTrading is enabled, False otherwise
         """
         if not self.connected:
-            print("❌ Not connected to MT5")
+            self.logger.error("Not connected to MT5")
             return False
         
         try:
@@ -509,36 +636,19 @@ class MT5Connector:
             
             # Check if AutoTrading is enabled
             if not terminal_info['trade_allowed']:
-                print("❌ AutoTrading is disabled in MetaTrader 5")
-                print(f"\n📊 Terminal Status:")
-                print(f"   Trade Allowed: {terminal_info['trade_allowed']}")
-                print(f"   Expert Advisors Allowed: {terminal_info['expert_allowed']}")
-                print(f"   DLLs Allowed: {terminal_info['dlls_allowed']}")
-                print(f"   Trade Timeout: {terminal_info['trade_timeout']}")
-                
-                print("\n🔧 TO ENABLE AUTOTRADING:")
-                print("   1. Open MetaTrader 5")
-                print("   2. Click on 'Tools' → 'Options'")
-                print("   3. Go to 'Expert Advisors' tab")
-                print("   4. Check 'Allow automated trading'")
-                print("   5. Check 'Allow DLL imports'")
-                print("   6. Check 'Allow WebRequest for listed URL'")
-                print("   7. Click 'OK' to save")
-                print("   8. Restart MetaTrader 5")
-                print("   9. Make sure the 'AutoTrading' button is green (enabled)")
-                print("   10. The button should show 'AutoTrading: ON'")
+                self.logger.warning("AutoTrading is disabled in MetaTrader 5")
+                self.logger.info(f"Terminal Status | trade_allowed={terminal_info['trade_allowed']} expert_allowed={terminal_info['expert_allowed']} dlls_allowed={terminal_info['dlls_allowed']} trade_timeout={terminal_info['trade_timeout']}")
                 return False
-            
-            print("✅ AutoTrading is enabled")
-            print(f"   Expert Advisors: {'✅ Allowed' if terminal_info['expert_allowed'] else '❌ Disabled'}")
-            print(f"   DLL Imports: {'✅ Allowed' if terminal_info['dlls_allowed'] else '❌ Disabled'}")
+
+            self.logger.info("AutoTrading is enabled")
+            self.logger.info(f"Expert Advisors: {'Allowed' if terminal_info['expert_allowed'] else 'Disabled'} | DLLs: {'Allowed' if terminal_info['dlls_allowed'] else 'Disabled'}")
             return True
             
         except Exception as e:
-            print(f"❌ Error checking AutoTrading status: {e}")
+            self.logger.exception(f"Error checking AutoTrading status: {e}")
             return False
     
-    def test_stop_levels(self, symbol, entry_price, sl=None, tp=None):
+    def test_stop_levels(self, symbol: str, entry_price: Optional[float], sl: Optional[float] = None, tp: Optional[float] = None) -> bool:
         """
         Test stop levels without placing an order
         
@@ -583,7 +693,7 @@ class MT5Connector:
             print(f"❌ Error testing stop levels: {e}")
             return False
     
-    def test_mt5_functionality(self):
+    def test_mt5_functionality(self) -> bool:
         """
         Test if MT5 is working properly
         
@@ -632,7 +742,7 @@ class MT5Connector:
             print(f"❌ MT5 functionality test failed: {e}")
             return False
     
-    def place_order_no_stops(self, symbol, order_type, volume, price=None, comment=""):
+    def place_order_no_stops(self, symbol: str, order_type: str, volume: float, price: Optional[float] = None, comment: str = "") -> Optional[Dict[str, Any]]:
         """
         Place a trade order without stop loss or take profit
         
@@ -732,7 +842,7 @@ class MT5Connector:
             print(f"❌ Error placing order: {e}")
             return None
     
-    def place_order(self, symbol, order_type, volume, price=None, sl=None, tp=None, comment=""):
+    def place_order(self, symbol: str, order_type: str, volume: float, price: Optional[float] = None, sl: Optional[float] = None, tp: Optional[float] = None, comment: str = "") -> Optional[Dict[str, Any]]:
         """
         Place a trade order
         
@@ -764,38 +874,19 @@ class MT5Connector:
             
             # Test MT5 functionality first
             if not self.test_mt5_functionality():
-                print("❌ MT5 functionality test failed")
+                self.logger.error("MT5 functionality test failed")
                 return None
             
             # Test stop levels first
             if not self.test_stop_levels(symbol, price or 0, sl, tp):
-                print("❌ Stop level test failed")
-                
-                # Offer fallback option
-                if sl is not None or tp is not None:
-                    print("\n⚠️  Stop level validation failed. Options:")
-                    print("   1. Place order without stops")
-                    print("   2. Cancel order")
-                    
-                    try:
-                        choice = input("Enter choice (1 or 2): ").strip()
-                        if choice == "1":
-                            print("🔄 Placing order without stops...")
-                            return self.place_order_no_stops(symbol, order_type, volume, price, comment)
-                        else:
-                            print("❌ Order cancelled")
-                            return None
-                    except:
-                        print("❌ Invalid input. Cancelling order.")
-                        return None
-                else:
-                    return None
+                self.logger.error("Stop level test failed")
+                return None
             
             # Get current market price for market orders
             if price is None:
                 current_prices = self.get_current_price(symbol)
                 if current_prices is None:
-                    print("❌ Could not get current market price")
+                    self.logger.error("Could not get current market price")
                     return None
                 
                 # Use ask price for BUY orders, bid price for SELL orders
@@ -804,7 +895,7 @@ class MT5Connector:
                 else:
                     price = current_prices['bid']
                 
-                print(f"📊 Using market price: {price:.5f}")
+                self.logger.debug(f"Using market price: {price:.5f}")
             
             # Validate and adjust stop levels
             adjusted_sl, adjusted_tp = self.validate_stop_levels(symbol, price, sl, tp)
@@ -826,17 +917,11 @@ class MT5Connector:
             }
             
             # Validate request before sending
-            print(f"\n📋 ORDER REQUEST:")
-            print(f"   Symbol: {request['symbol']}")
-            print(f"   Type: {order_type}")
-            print(f"   Volume: {request['volume']}")
-            print(f"   Price: {request['price']}")
-            print(f"   Stop Loss: {request['sl']}")
-            print(f"   Take Profit: {request['tp']}")
+            self.logger.info(f"ORDER REQUEST | symbol={request['symbol']} type={order_type} volume={request['volume']} price={request['price']} sl={request['sl']} tp={request['tp']}")
             
             # Check if symbol is available for trading
             if not mt5.symbol_select(symbol, True):
-                print(f"❌ Symbol {symbol} is not available for trading")
+                self.logger.error(f"Symbol {symbol} is not available for trading")
                 return None
             
             # Send order
@@ -844,84 +929,55 @@ class MT5Connector:
             
             # Check if result is None (order failed)
             if result is None:
-                print(f"❌ Order failed: MT5 returned None")
-                print(f"   Last error: {mt5.last_error()}")
+                self.logger.error("Order failed: MT5 returned None | last_error=%s", mt5.last_error())
                 return None
             
             if result.retcode != mt5.TRADE_RETCODE_DONE:
-                print(f"❌ Order failed: {result.retcode} - {result.comment}")
+                self.logger.error(f"Order failed: {result.retcode} - {result.comment}")
                 
                 # Provide specific guidance for common error codes
                 if result.retcode == 10019:  # No money
-                    print(f"\n💡 ERROR 10019 - NO MONEY:")
-                    print(f"   This means insufficient margin to place the trade.")
-                    print(f"   Possible solutions:")
-                    print(f"   1. Reduce position size")
-                    print(f"   2. Close some existing positions")
-                    print(f"   3. Add more funds to your account")
-                    print(f"   4. Check your leverage settings")
+                    self.logger.warning("ERROR 10019 - NO MONEY: insufficient margin to place the trade")
                     
                     # Get current account status for debugging
                     try:
                         account_info = self.get_account_summary()
                         if account_info:
-                            print(f"\n📊 Current Account Status:")
-                            print(f"   Balance: ${account_info.get('balance', 0):,.2f}")
-                            print(f"   Equity: ${account_info.get('equity', 0):,.2f}")
-                            print(f"   Used Margin: ${account_info.get('margin', 0):,.2f}")
-                            print(f"   Free Margin: ${account_info.get('margin_free', 0):,.2f}")
-                            print(f"   Margin Level: {account_info.get('margin_level', 0):,.2f}%")
+                            self.logger.info("Account Status | balance=$%s equity=$%s margin=$%s free_margin=$%s margin_level=%s%%",
+                                            f"{account_info.get('balance', 0):,.2f}",
+                                            f"{account_info.get('equity', 0):,.2f}",
+                                            f"{account_info.get('margin', 0):,.2f}",
+                                            f"{account_info.get('margin_free', 0):,.2f}",
+                                            f"{account_info.get('margin_level', 0):,.2f}")
                     except:
                         pass
                 
                 elif result.retcode == 10018:  # Market closed
-                    print(f"\n💡 ERROR 10018 - MARKET CLOSED:")
-                    print(f"   The market is currently closed for this symbol.")
-                    print(f"   Try again during market hours.")
+                    self.logger.warning("ERROR 10018 - MARKET CLOSED: The market is currently closed for this symbol")
                 
                 elif result.retcode == 10004:  # Requote
-                    print(f"\n💡 ERROR 10004 - REQUOTE:")
-                    print(f"   Price has changed. Try placing the order again.")
+                    self.logger.warning("ERROR 10004 - REQUOTE: Price has changed. Try placing the order again")
                 
                 elif result.retcode == 10006:  # Request rejected
-                    print(f"\n💡 ERROR 10006 - REQUEST REJECTED:")
-                    print(f"   Order was rejected by the broker.")
-                    print(f"   Check your trading permissions and account status.")
+                    self.logger.warning("ERROR 10006 - REQUEST REJECTED: Order was rejected by the broker")
                 
                 elif result.retcode == 10014:  # Invalid volume
-                    print(f"\n💡 ERROR 10014 - INVALID VOLUME:")
-                    print(f"   The volume ({volume}) is not valid for this symbol.")
-                    print(f"   Possible causes:")
-                    print(f"   1. Volume is below minimum allowed")
-                    print(f"   2. Volume is above maximum allowed")
-                    print(f"   3. Volume step is incorrect")
-                    print(f"   4. Volume format is invalid")
+                    self.logger.warning(f"ERROR 10014 - INVALID VOLUME: requested volume={volume}")
                     
                     # Get symbol info for debugging
                     try:
                         symbol_info = self.get_symbol_info(symbol)
                         if symbol_info:
-                            print(f"\n📊 Symbol Volume Requirements:")
-                            print(f"   Min Volume: {symbol_info.get('volume_min', 'N/A')}")
-                            print(f"   Max Volume: {symbol_info.get('volume_max', 'N/A')}")
-                            print(f"   Volume Step: {symbol_info.get('volume_step', 'N/A')}")
-                            print(f"   Requested Volume: {volume}")
+                            self.logger.info(f"Symbol Volume Requirements | min={symbol_info.get('volume_min', 'N/A')} max={symbol_info.get('volume_max', 'N/A')} step={symbol_info.get('volume_step', 'N/A')} requested={volume}")
                     except:
                         pass
                 
                 else:
-                    print(f"\n💡 For more information about error {result.retcode}, check MT5 documentation.")
+                    self.logger.info(f"For more information about error {result.retcode}, check MT5 documentation")
                 
                 return None
             
-            print(f"✅ Order placed successfully")
-            print(f"   Symbol: {symbol}")
-            print(f"   Type: {order_type}")
-            print(f"   Volume: {volume}")
-            print(f"   Price: {result.price}")
-            print(f"   Stop Loss: {adjusted_sl}")
-            print(f"   Take Profit: {adjusted_tp}")
-            print(f"   Order ID: {result.order}")
+            self.logger.info(f"Order placed successfully | symbol={symbol} type={order_type} volume={volume} price={result.price} sl={adjusted_sl} tp={adjusted_tp} order_id={result.order}")
             
             return {
                 'order_id': result.order,
@@ -935,10 +991,10 @@ class MT5Connector:
             }
             
         except Exception as e:
-            print(f"❌ Error placing order: {e}")
+            self.logger.exception(f"Error placing order: {e}")
             return None
     
-    def close_position(self, position_id):
+    def close_position(self, position_id: int) -> bool:
         """
         Close a specific position
         
@@ -949,14 +1005,14 @@ class MT5Connector:
             bool: True if successful, False otherwise
         """
         if not self.connected:
-            print("❌ Not connected to MT5")
+            self.logger.error("Not connected to MT5")
             return False
         
         try:
             # Get position info
             position = mt5.positions_get(ticket=position_id)
             if not position:
-                print(f"❌ Position {position_id} not found")
+                self.logger.error(f"Position {position_id} not found")
                 return False
             
             position = position[0]
@@ -981,22 +1037,21 @@ class MT5Connector:
             
             # Check if result is None (order failed)
             if result is None:
-                print(f"❌ Close order failed: MT5 returned None")
-                print(f"   Last error: {mt5.last_error()}")
+                self.logger.error("Close order failed: MT5 returned None | last_error=%s", mt5.last_error())
                 return False
             
             if result.retcode != mt5.TRADE_RETCODE_DONE:
-                print(f"❌ Close order failed: {result.retcode} - {result.comment}")
+                self.logger.error(f"Close order failed: {result.retcode} - {result.comment}")
                 return False
             
-            print(f"✅ Position {position_id} closed successfully")
+            self.logger.info(f"Position {position_id} closed successfully")
             return True
             
         except Exception as e:
-            print(f"❌ Error closing position: {e}")
+            self.logger.exception(f"Error closing position: {e}")
             return False
     
-    def get_positions(self):
+    def get_positions(self) -> Optional[List[Dict[str, Any]]]:
         """
         Get all open positions
         
@@ -1004,7 +1059,7 @@ class MT5Connector:
             list: List of open positions or None if failed
         """
         if not self.connected:
-            print("❌ Not connected to MT5")
+            self.logger.error("Not connected to MT5")
             return None
         
         try:
@@ -1029,10 +1084,10 @@ class MT5Connector:
             ]
             
         except Exception as e:
-            print(f"❌ Error getting positions: {e}")
+            self.logger.exception(f"Error getting positions: {e}")
             return None
     
-    def get_account_summary(self):
+    def get_account_summary(self) -> Optional[Dict[str, Any]]:
         """
         Get account summary information
         
@@ -1040,7 +1095,7 @@ class MT5Connector:
             dict: Account summary or None if failed
         """
         if not self.connected or self.account_info is None:
-            print("❌ Not connected to MT5")
+            self.logger.error("Not connected to MT5")
             return None
         
         try:
@@ -1056,10 +1111,10 @@ class MT5Connector:
             }
             
         except Exception as e:
-            print(f"❌ Error getting account summary: {e}")
+            self.logger.exception(f"Error getting account summary: {e}")
             return None
     
-    def calculate_position_size(self, risk_amount, entry_price, stop_loss_price, symbol):
+    def calculate_position_size(self, risk_amount: float, entry_price: float, stop_loss_price: float, symbol: str) -> Optional[float]:
         """
         Calculate position size based on risk amount
         
@@ -1098,7 +1153,7 @@ class MT5Connector:
             return position_size
             
         except Exception as e:
-            print(f"❌ Error calculating position size: {e}")
+            self.logger.exception(f"Error calculating position size: {e}")
             return None
 
 # Example usage and testing

@@ -25,7 +25,8 @@ try:
     import joblib
     ML_AVAILABLE = True
 except ImportError:
-    print("⚠️  ML libraries not available. Install with: pip install scikit-learn joblib")
+    import logging as _logging
+    _logging.getLogger('mt5_trading_bot').warning("ML libraries not available. Install with: pip install scikit-learn joblib")
     ML_AVAILABLE = False
 
 # Technical Analysis
@@ -33,7 +34,8 @@ try:
     import ta
     TA_AVAILABLE = True
 except ImportError:
-    print("⚠️  TA library not available. Install with: pip install ta")
+    import logging as _logging
+    _logging.getLogger('mt5_trading_bot').warning("TA library not available. Install with: pip install ta")
     TA_AVAILABLE = False
 
 # Smart Money Concept
@@ -41,19 +43,20 @@ try:
     from smart_money_concept import SmartMoneyConcept
     SMC_AVAILABLE = True
 except ImportError:
-    print("⚠️  Smart Money Concept module not available")
+    import logging as _logging
+    _logging.getLogger('mt5_trading_bot').warning("Smart Money Concept module not available")
     SMC_AVAILABLE = False
 
 from dotenv import load_dotenv
-from trading_bot import TradingBot
+from typing import Any, Dict, List, Optional, Tuple
 from mt5_connector import MT5Connector
 
 # Load environment variables
 load_dotenv()
 
 class MT5TradingBot:
-    def __init__(self, symbol, timeframe, risk_per_trade=0.02, 
-                 use_mt5_data=True, auto_trade=False, use_ml=True, use_smc=True):
+    def __init__(self, symbol: str, timeframe: str, risk_per_trade: float = 0.02, 
+                 use_mt5_data: bool = True, auto_trade: bool = False, use_ml: bool = True, use_smc: bool = True) -> None:
         """
         Initialize MT5 integrated trading bot
         
@@ -91,6 +94,10 @@ class MT5TradingBot:
         self.mt5_connector = None
         self.connected = False
         
+        # Logger
+        import logging as _logging
+        self.logger = _logging.getLogger('mt5_trading_bot')
+
         # Trading state
         self.last_analysis = None
         self.current_position = None
@@ -104,36 +111,37 @@ class MT5TradingBot:
         
         # Try to load existing ML model on startup
         if self.use_ml:
-            default_model_name = f"ml_model_{self.symbol}_{self.timeframe}.joblib"
+            os.makedirs('models', exist_ok=True)
+            default_model_name = os.path.join('models', f"ml_model_{self.symbol}_{self.timeframe}.joblib")
             if self.load_ml_model(default_model_name):
-                print(f"✅ Loaded existing ML model: {default_model_name}")
+                self.logger.info(f"Loaded existing ML model: {default_model_name}")
             else:
-                print(f"📝 No existing ML model found. Will train new model when needed.")
+                self.logger.info(f"No existing ML model found. Will train new model when needed.")
         
         # Initialize SMC analyzer
         if self.use_smc:
-            print(f"🧠 Smart Money Concept analysis enabled for {self.symbol}")
+            self.logger.info(f"Smart Money Concept analysis enabled for {self.symbol}")
         else:
-            print(f"⚠️  Smart Money Concept analysis disabled")
+            self.logger.warning(f"Smart Money Concept analysis disabled")
     
-    def connect_mt5(self):
+    def connect_mt5(self) -> bool:
         """Connect to MT5 and get account information"""
         if self.mt5_connector:
             self.connected = self.mt5_connector.connect()
             if self.connected:
-                print("✅ MT5 connection established")
+                self.logger.info("MT5 connection established")
                 # Verify account connection by getting account info
                 account_info = self.mt5_connector.get_account_summary()
                 if account_info:
                     balance = account_info.get('balance', 0)
-                    print(f"💰 Account Balance: ${balance:,.2f}")
+                    self.logger.info(f"Account Balance: ${balance:,.2f}")
                 else:
-                    print("⚠️  Could not get account balance")
+                    self.logger.warning("Could not get account balance")
             else:
-                print("❌ MT5 connection failed")
+                self.logger.error("MT5 connection failed")
         return self.connected
     
-    def debug_data_structure(self, data):
+    def debug_data_structure(self, data: Optional[pd.DataFrame]) -> None:
         """
         Debug method to check data structure
         
@@ -141,31 +149,28 @@ class MT5TradingBot:
             data (pd.DataFrame): Data to debug
         """
         if data is None:
-            print("❌ Data is None")
+            self.logger.error("Data is None")
             return
         
-        print(f"\n🔍 DATA STRUCTURE DEBUG:")
-        print(f"   Shape: {data.shape}")
-        print(f"   Columns: {list(data.columns)}")
-        print(f"   Data types:")
+        self.logger.debug("DATA STRUCTURE DEBUG")
+        self.logger.debug(f"Shape: {data.shape} | Columns: {list(data.columns)}")
+        self.logger.debug("Data types:")
         for col in data.columns:
-            print(f"     {col}: {data[col].dtype}")
+            self.logger.debug(f"{col}: {data[col].dtype}")
         
         if len(data) > 0:
-            print(f"   First row:")
-            print(f"     {data.iloc[0].to_dict()}")
-            print(f"   Last row:")
-            print(f"     {data.iloc[-1].to_dict()}")
+            self.logger.debug(f"First row: {data.iloc[0].to_dict()}")
+            self.logger.debug(f"Last row: {data.iloc[-1].to_dict()}")
         
         # Check for required columns
         required_columns = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume']
         missing_columns = [col for col in required_columns if col not in data.columns]
         if missing_columns:
-            print(f"   ❌ Missing columns: {missing_columns}")
+            self.logger.error(f"Missing columns: {missing_columns}")
         else:
-            print(f"   ✅ All required columns present")
+            self.logger.debug("All required columns present")
     
-    def get_market_data(self):
+    def get_market_data(self) -> Optional[pd.DataFrame]:
         """
         Get market data from MT5 or yfinance
         
@@ -175,9 +180,9 @@ class MT5TradingBot:
         if self.use_mt5_data and self.connected:
             # Get data from MT5 - request more data for shorter timeframes
             if self.timeframe in ['1m', '5m']:
-                data_count = 5000  # More data for short timeframes
+                data_count = 20000  # Increased data for short timeframes
             else:
-                data_count = 1000  # Standard amount for longer timeframes
+                data_count = 5000   # Increased amount for longer timeframes
             
             data = self.mt5_connector.get_historical_data(self.symbol, self.timeframe, data_count)
             if data is not None:
@@ -189,31 +194,31 @@ class MT5TradingBot:
                 
                 # Check if we have the required columns
                 if all(col in data.columns for col in required_columns):
-                    print(f"✅ MT5 data structure is correct")
+                    self.logger.debug("MT5 data structure is correct")
                     return data
                 else:
-                    print(f"⚠️  MT5 data missing required columns. Available: {list(data.columns)}")
-                    print("⚠️  Falling back to yfinance")
+                    self.logger.warning(f"MT5 data missing required columns. Available: {list(data.columns)}")
+                    # When using MT5 data, avoid falling back to yfinance to prevent 404 noise
+                    return None
         
-        # Fallback to yfinance
-        try:
-            # Use a default account size for yfinance fallback (not used for MT5 trading)
-            default_account_size = 10000
-            self.analysis_bot = TradingBot(self.symbol, self.timeframe, "forex", 
-                                         default_account_size, self.risk_per_trade)
-            if self.analysis_bot.fetch_data():
-                data = self.analysis_bot.data
-                print("✅ Using yfinance data")
-                self.debug_data_structure(data)
-                return data
-        except Exception as e:
-            print(f"❌ Error getting market data: {e}")
-            import traceback
-            traceback.print_exc()
+        # Fallback to yfinance only if MT5 data is not requested
+        if not self.use_mt5_data:
+            try:
+                from trading_bot import TradingBot
+                default_account_size = 10000
+                self.analysis_bot = TradingBot(self.symbol, self.timeframe, "forex", 
+                                             default_account_size, self.risk_per_trade)
+                if self.analysis_bot.fetch_data():
+                    data = self.analysis_bot.data
+                    self.logger.info("Using yfinance data")
+                    self.debug_data_structure(data)
+                    return data
+            except Exception as e:
+                self.logger.exception(f"Error getting market data: {e}")
         
         return None
     
-    def create_technical_features(self, data):
+    def create_technical_features(self, data: pd.DataFrame) -> pd.DataFrame:
         """
         Create advanced technical indicators as ML features
         
@@ -224,7 +229,7 @@ class MT5TradingBot:
             pd.DataFrame: Data with technical indicators
         """
         if not TA_AVAILABLE:
-            print("❌ TA library not available for technical indicators")
+            self.logger.error("TA library not available for technical indicators")
             return data
         
         df = data.copy()
@@ -279,7 +284,7 @@ class MT5TradingBot:
         
         return df
     
-    def create_target_variable(self, data, lookforward=5):
+    def create_target_variable(self, data: pd.DataFrame, lookforward: int = 5) -> pd.Series:
         """
         Create target variable for ML training
         
@@ -299,7 +304,7 @@ class MT5TradingBot:
         
         return target
     
-    def prepare_ml_features(self, data):
+    def prepare_ml_features(self, data: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series, List[str]]:
         """
         Prepare features for ML model
         
@@ -342,7 +347,7 @@ class MT5TradingBot:
         
         return X, y, available_features
     
-    def train_ml_model(self, data):
+    def train_ml_model(self, data: pd.DataFrame) -> bool:
         """
         Train machine learning model
         
@@ -353,11 +358,11 @@ class MT5TradingBot:
             bool: True if training successful
         """
         if not self.use_ml:
-            print("❌ ML features disabled")
+            self.logger.error("ML features disabled")
             return False
         
         try:
-            print("🤖 Training ML model...")
+            self.logger.info("Training ML model...")
             
             # Create technical features
             data_with_features = self.create_technical_features(data)
@@ -366,7 +371,7 @@ class MT5TradingBot:
             X, y, feature_names = self.prepare_ml_features(data_with_features)
             
             if len(X) < 100:
-                print("❌ Insufficient data for ML training (need at least 100 samples)")
+                self.logger.error("Insufficient data for ML training (need at least 100 samples)")
                 return False
             
             # Split data
@@ -395,11 +400,8 @@ class MT5TradingBot:
             # Cross-validation
             cv_scores = cross_val_score(self.ml_model, X_train_scaled, y_train, cv=5)
             
-            print(f"✅ ML Model Trained Successfully")
-            print(f"   Training Accuracy: {train_score:.3f}")
-            print(f"   Test Accuracy: {test_score:.3f}")
-            print(f"   Cross-Validation: {cv_scores.mean():.3f} (+/- {cv_scores.std() * 2:.3f})")
-            print(f"   Features Used: {len(feature_names)}")
+            self.logger.info("ML Model Trained Successfully")
+            self.logger.info(f"Training Accuracy: {train_score:.3f} | Test: {test_score:.3f} | CV: {cv_scores.mean():.3f} (+/- {cv_scores.std() * 2:.3f}) | Features: {len(feature_names)}")
             
             # Feature importance
             feature_importance = pd.DataFrame({
@@ -407,18 +409,18 @@ class MT5TradingBot:
                 'importance': self.ml_model.feature_importances_
             }).sort_values('importance', ascending=False)
             
-            print(f"\n🔝 Top 10 Important Features:")
+            self.logger.debug("Top 10 Important Features:")
             for i, row in feature_importance.head(10).iterrows():
-                print(f"   {row['feature']}: {row['importance']:.3f}")
+                self.logger.debug(f"{row['feature']}: {row['importance']:.3f}")
             
             self.model_trained = True
             return True
             
         except Exception as e:
-            print(f"❌ ML training failed: {e}")
+            self.logger.exception(f"ML training failed: {e}")
             return False
     
-    def get_ml_prediction(self, data):
+    def get_ml_prediction(self, data: pd.DataFrame) -> Optional[Dict[str, Any]]:
         """
         Get ML prediction for current market conditions
         
@@ -437,22 +439,21 @@ class MT5TradingBot:
             
             # Check if we have the required feature columns
             if not self.feature_columns or data_with_features is None:
-                print("⚠️  No feature columns available for ML prediction")
+                self.logger.warning("No feature columns available for ML prediction")
                 return None
             
             # Check if all feature columns exist in the data
             missing_columns = [col for col in self.feature_columns if col not in data_with_features.columns]
             if missing_columns:
-                print(f"⚠️  Missing feature columns: {missing_columns}")
+                self.logger.warning(f"Missing feature columns: {missing_columns}")
                 return None
             
-            # Get latest data point
-            latest_data = data_with_features[self.feature_columns].iloc[-1:].copy()
-            
-            # Check for NaN values
-            if latest_data.isnull().any().any():
-                print("⚠️  Missing features for ML prediction - using basic analysis only")
+            # Use the most recent row with complete features
+            feature_frame = data_with_features[self.feature_columns].dropna(axis=0, how='any')
+            if feature_frame.empty:
+                self.logger.warning("All recent rows contain NaNs for required features; cannot run ML prediction")
                 return None
+            latest_data = feature_frame.tail(1).copy()
             
             # Scale features
             latest_scaled = self.scaler.transform(latest_data)
@@ -473,10 +474,10 @@ class MT5TradingBot:
             }
             
         except Exception as e:
-            print(f"❌ ML prediction failed: {e}")
+            self.logger.exception(f"ML prediction failed: {e}")
             return None
     
-    def analyze_market(self):
+    def analyze_market(self) -> Optional[Dict[str, Any]]:
         """
         Perform comprehensive market analysis including traditional TA, ML, and SMC
         
@@ -484,23 +485,24 @@ class MT5TradingBot:
             dict: Combined analysis results
         """
         try:
-            print(f"\n🔍 Analyzing {self.symbol} on {self.timeframe} timeframe...")
+            self.logger.info(f"Analyzing {self.symbol} on {self.timeframe} timeframe...")
             
             # Get market data
             data = self.get_market_data()
             if data is None or len(data) < 100:
-                print("❌ Insufficient data for analysis")
+                self.logger.error("Insufficient data for analysis")
                 return None
             
             # Initialize analysis bot if needed
             if self.analysis_bot is None:
+                from trading_bot import TradingBot
                 self.analysis_bot = TradingBot(self.symbol, self.timeframe)
             
             # Update analysis bot data
             self.analysis_bot.data = data
             
             # 1. Traditional Technical Analysis
-            print("📊 Performing Traditional Technical Analysis...")
+            self.logger.info("Performing Traditional Technical Analysis...")
             traditional_signals = self.analysis_bot.analyze_market_trend()
             
             # 2. Smart Money Concept Analysis
@@ -508,9 +510,15 @@ class MT5TradingBot:
             if self.use_smc:
                 smc_results = self.analyze_smc(data)
             
-            # 3. Machine Learning Analysis
+            # 3. Machine Learning Analysis (prioritize ML when available)
             ml_prediction = None
             if self.use_ml and self.analysis_bot and self.analysis_bot.data is not None:
+                # Ensure model is loaded/trained for this symbol/timeframe
+                if not self.model_trained:
+                    default_model_name = os.path.join('models', f"ml_model_{self.symbol}_{self.timeframe}.joblib")
+                    if not self.load_ml_model(default_model_name):
+                        # Train on the fly if loading failed
+                        self.train_ml_model(self.analysis_bot.data)
                 ml_prediction = self.get_ml_prediction(self.analysis_bot.data)
             
             # 4. Get SMC trading signals
@@ -540,58 +548,50 @@ class MT5TradingBot:
             return combined_signal
             
         except Exception as e:
-            print(f"❌ Error in market analysis: {e}")
+            self.logger.exception(f"Error in market analysis: {e}")
             import traceback
             traceback.print_exc()
             return None
     
-    def print_analysis_summary(self, combined_signal, traditional_signals, smc_results, ml_prediction):
+    def print_analysis_summary(self, combined_signal: Optional[Dict[str, Any]], traditional_signals: Optional[Dict[str, Any]], smc_results: Optional[Dict[str, Any]], ml_prediction: Optional[Dict[str, Any]]) -> None:
         """Print comprehensive analysis summary"""
-        print(f"\n📋 Analysis Summary for {self.symbol} ({self.timeframe}):")
-        print("=" * 60)
+        self.logger.info(f"Analysis Summary for {self.symbol} ({self.timeframe})")
         
         # Traditional Analysis
         if traditional_signals:
-            print(f"📊 Traditional TA: {traditional_signals.get('signal_type', 'HOLD')}")
+            self.logger.info(f"Traditional TA: {traditional_signals.get('signal_type', 'HOLD')}")
             if traditional_signals.get('signal_strength'):
-                print(f"   Strength: {traditional_signals['signal_strength']:.2f}")
+                self.logger.info(f"Strength: {traditional_signals['signal_strength']:.2f}")
         
         # SMC Analysis
         if smc_results and self.smc_summary:
-            print(f"🧠 Smart Money Concept:")
-            print(f"   Market Structure: {self.smc_summary['market_structure']['trend_direction']}")
-            print(f"   Order Blocks: {self.smc_summary['order_blocks']['total_count']}")
-            print(f"   Fair Value Gaps: {self.smc_summary['fair_value_gaps']['total_count']}")
-            print(f"   Liquidity Zones: {self.smc_summary['liquidity_zones']['total_count']}")
+            self.logger.info("Smart Money Concept:")
+            self.logger.info(f"Market Structure: {self.smc_summary['market_structure']['trend_direction']}")
+            self.logger.info(f"Order Blocks: {self.smc_summary['order_blocks']['total_count']}")
+            self.logger.info(f"Fair Value Gaps: {self.smc_summary['fair_value_gaps']['total_count']}")
+            self.logger.info(f"Liquidity Zones: {self.smc_summary['liquidity_zones']['total_count']}")
         
         # ML Analysis
         if ml_prediction:
             prediction = ml_prediction.get('prediction', 0.5)
             confidence = ml_prediction.get('confidence', 0)
-            print(f"🤖 Machine Learning:")
-            print(f"   Prediction: {'BULLISH' if prediction > 0.6 else 'BEARISH' if prediction < 0.4 else 'NEUTRAL'}")
-            print(f"   Confidence: {confidence:.2f}")
+            self.logger.info("Machine Learning:")
+            self.logger.info(f"Prediction: {'BULLISH' if prediction > 0.6 else 'BEARISH' if prediction < 0.4 else 'NEUTRAL'} | Confidence: {confidence:.2f}")
         
         # Combined Signal
         if combined_signal:
-            print(f"\n🎯 Combined Signal:")
-            print(f"   Type: {combined_signal['signal_type']}")
-            print(f"   Strength: {combined_signal['signal_strength']:.2f}")
-            print(f"   Sources: {', '.join(combined_signal['signal_sources'])}")
+            self.logger.info("Combined Signal:")
+            self.logger.info(f"Type: {combined_signal['signal_type']} | Strength: {combined_signal['signal_strength']:.2f} | Sources: {', '.join(combined_signal['signal_sources'])}")
             
             if combined_signal.get('entry_price'):
-                print(f"   Entry: {combined_signal['entry_price']:.5f}")
-                print(f"   Stop Loss: {combined_signal['stop_loss']:.5f}")
-                print(f"   Target: {combined_signal['target']:.5f}")
+                self.logger.info(f"Entry: {combined_signal['entry_price']:.5f} | SL: {combined_signal['stop_loss']:.5f} | TP: {combined_signal['target']:.5f}")
                 
                 if combined_signal.get('potential_profit'):
-                    print(f"   Potential Profit: ${combined_signal['potential_profit']:.2f}")
+                    self.logger.info(f"Potential Profit: ${combined_signal['potential_profit']:.2f}")
         else:
-            print(f"\n⚠️  No strong combined signal generated")
-        
-        print("=" * 60)
+            self.logger.warning("No strong combined signal generated")
     
-    def get_trading_signals(self, analysis):
+    def get_trading_signals(self, analysis: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
         Get advanced trading signals based on new trading rules
         
@@ -619,8 +619,7 @@ class MT5TradingBot:
             print(f"❌ Error checking analysis structure: {e}")
             return None
         
-        print(f"\n🎯 GENERATING TRADING SIGNALS")
-        print("=" * 50)
+        self.logger.info("GENERATING TRADING SIGNALS")
         
         # Get current market price from MT5
         current_price = None
@@ -632,11 +631,11 @@ class MT5TradingBot:
         
         if current_price is None:
             # Fallback to last close price
-            if self.analysis_bot and self.analysis_bot.data is not None:
+            if self.analysis_bot and self.analysis_bot.data is not None and len(self.analysis_bot.data) > 0:
                 current_price = self.analysis_bot.data['Close'].iloc[-1]
         
         if current_price is None:
-            print("❌ Cannot get current market price")
+            self.logger.error("Cannot get current market price")
             return None
         
         # Initialize signal parameters based on trend direction
@@ -665,7 +664,7 @@ class MT5TradingBot:
         # Process breakout and retest signals
         breakout_signals = analysis.get('breakout_signals')
         if breakout_signals and breakout_signals.get('entry_signal'):
-            print("🎯 Using breakout and retest signals")
+            self.logger.info("Using breakout and retest signals")
             entry_price = breakout_signals.get('entry_price', current_price)
             stop_loss_price = breakout_signals.get('stop_loss')
             target_price = breakout_signals.get('target')
@@ -675,7 +674,7 @@ class MT5TradingBot:
         elif analysis.get('continuation_patterns'):
             patterns = analysis.get('continuation_patterns', {})
             if patterns.get('bullish_flag') or patterns.get('pennant') or patterns.get('inverted_head_shoulders'):
-                print("🎯 Using continuation pattern signals")
+                self.logger.info("Using continuation pattern signals")
                 
                 # Calculate pattern-based entry and targets
                 if patterns['bullish_flag']:
@@ -690,7 +689,10 @@ class MT5TradingBot:
                     pennant_details = patterns['pattern_details']['pennant']
                     entry_price = current_price
                     # Use ATR-based stop loss
-                    atr = self.calculate_atr(self.analysis_bot.h4_data, period=14)
+                    try:
+                        atr = self.calculate_atr(getattr(self.analysis_bot, 'h4_data', None), period=14)
+                    except Exception:
+                        atr = 0.0002
                     stop_loss_price = entry_price - (atr * 2)
                     target_price = entry_price + (atr * 6)  # 1:3 ratio
                     signal_type = "PENNANT_BUY"
@@ -707,7 +709,7 @@ class MT5TradingBot:
         
         # If no specific pattern signals, use trendline-based signals
         else:
-            print("🎯 Using trendline-based signals")
+            self.logger.info("Using trendline-based signals")
             
             # Use H4 trendlines for entry signals (if available)
             h4_trendlines = analysis.get('h4_trendlines', {})
@@ -727,7 +729,7 @@ class MT5TradingBot:
                         # Use ATR-based target
                         try:
                             atr = self.calculate_atr(self.analysis_bot.data, period=14) if self.analysis_bot and self.analysis_bot.data is not None else 0.0002
-                        except:
+                        except Exception:
                             atr = 0.0002
                         target_price = entry_price + (atr * 6)  # 1:3 ratio
                     
@@ -735,7 +737,7 @@ class MT5TradingBot:
         
         # Validate and adjust stop loss and target
         if stop_loss_price is None or target_price is None:
-            print("🎯 Using default risk-based stop loss and target calculation")
+            self.logger.info("Using default risk-based stop loss and target calculation")
             
             # Calculate ATR for dynamic stop loss
             atr = 0.0002  # Default ATR for forex pairs
@@ -798,58 +800,33 @@ class MT5TradingBot:
             print(f"❌ Invalid account balance: ${current_balance}")
             return None
         
-        # Calculate position size based on risk (for forex)
-        risk_per_trade_amount = current_balance * self.risk_per_trade
-        print(f"💸 Risk per trade amount: ${risk_per_trade_amount:,.2f} ({self.risk_per_trade * 100}% of balance)")
-        
-        # For forex, position size = risk amount / (stop loss distance in pips * pip value)
-        # Pip value for EURUSD = 0.0001, so 1 pip = $1 per 10,000 units (0.1 lots)
+        # Robust position sizing constrained by risk and free margin
         pip_size = 0.0001 if 'JPY' not in self.symbol else 0.01
         stop_loss_pips = price_risk / pip_size
         target_pips = price_reward / pip_size
-        
         print(f"📊 Stop Loss: {stop_loss_pips:.1f} pips, Target: {target_pips:.1f} pips")
-        
-        if stop_loss_pips > 0:
-            # Position size in lots (1 lot = 100,000 units for major pairs)
-            # For EURUSD: 1 pip = $10 per lot
-            position_size = risk_per_trade_amount / (stop_loss_pips * 10)  # $10 per pip per lot for EURUSD
-            print(f"📈 Calculated position size: {position_size:.4f} lots")
-            
-            # Get symbol info for volume validation
-            symbol_info = None
-            if self.connected and self.mt5_connector:
-                symbol_info = self.mt5_connector.get_symbol_info(self.symbol)
-            
-            # Validate and adjust position size based on broker requirements
-            if symbol_info:
-                min_volume = symbol_info.get('volume_min', 0.01)
-                max_volume = symbol_info.get('volume_max', 100.0)
-                volume_step = symbol_info.get('volume_step', 0.01)
-                
-                print(f"📊 Broker volume limits: Min={min_volume}, Max={max_volume}, Step={volume_step}")
-                
-                # Ensure position size is within broker limits
-                position_size = max(position_size, min_volume)
-                position_size = min(position_size, max_volume)
-                
-                # Round to nearest step
-                position_size = round(position_size / volume_step) * volume_step
-                
-                print(f"📈 Adjusted position size: {position_size:.4f} lots")
-            else:
-                # Fallback limits if symbol info not available
-                position_size = min(position_size, 10.0)  # Max 10 lots
-                position_size = max(position_size, 0.01)  # Min 0.01 lots
-                position_size = round(position_size / 0.01) * 0.01  # Round to 0.01
-                print(f"📈 Final position size (fallback): {position_size:.4f} lots")
-        else:
-            position_size = 0.01  # Default minimum
+
+        position_size = 0.0
+        if self.connected and self.mt5_connector:
+            position_size = self.mt5_connector.calculate_position_size_robust(
+                symbol=self.symbol,
+                order_type=signal_type,
+                risk_percent=self.risk_per_trade,
+                entry_price=entry_price,
+                stop_loss_price=stop_loss_price,
+                margin_buffer=0.95
+            )
+            print(f"📈 Robust position size: {position_size:.4f} lots")
+        if not position_size or position_size <= 0:
+            # Fallback minimum if calculations fail
+            position_size = 0.01
             print(f"📈 Using minimum position size: {position_size:.4f} lots")
         
         # Calculate actual dollar amounts
-        risk_amount = position_size * stop_loss_pips * 10  # $10 per pip per lot
-        reward_amount = position_size * target_pips * 10
+        # Use dynamic pip value per lot for accurate dollar amounts
+        pip_value_per_lot = self.mt5_connector.get_pip_value_per_lot(self.symbol) if (self.connected and self.mt5_connector) else 10.0
+        risk_amount = position_size * stop_loss_pips * pip_value_per_lot
+        reward_amount = position_size * target_pips * pip_value_per_lot
         
         # Get ML prediction for confirmation
         ml_prediction = None
@@ -891,7 +868,7 @@ class MT5TradingBot:
         
         return signals
     
-    def calculate_atr(self, data, period=14):
+    def calculate_atr(self, data: Optional[pd.DataFrame], period: int = 14) -> float:
         """
         Calculate Average True Range (ATR) for volatility-based calculations
         
@@ -922,7 +899,7 @@ class MT5TradingBot:
             print(f"⚠️  Error calculating ATR: {e}")
             return 0.001
     
-    def execute_trade(self, signals):
+    def execute_trade(self, signals: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
         Execute trade based on signals
         
@@ -955,18 +932,22 @@ class MT5TradingBot:
             print(f"💰 Free Margin: ${free_margin:,.2f}")
             
             # Check if we have sufficient free margin
-            required_margin = signals['position_size'] * 1000  # Rough estimate: 1 lot = $1000 margin
+            pos_size = float(signals.get('position_size') or 0)
+            required_margin = pos_size * 1000  # Rough estimate: 1 lot = $1000 margin
             if free_margin < required_margin:
                 print(f"❌ Insufficient free margin: ${free_margin:,.2f} available, ${required_margin:,.2f} required")
-                print(f"   Position size: {signals['position_size']:.4f} lots")
+                print(f"   Position size: {pos_size:.4f} lots")
                 
                 # Try to reduce position size to fit available margin
                 max_position_size = free_margin / 1000  # Maximum position size based on available margin
                 if max_position_size >= 0.01:  # Minimum position size
                     print(f"🔄 Attempting to reduce position size to {max_position_size:.4f} lots")
+                    original_size = pos_size
                     signals['position_size'] = max_position_size
-                    signals['risk_amount'] = signals['risk_amount'] * (max_position_size / signals['position_size'])
-                    signals['potential_profit'] = signals['potential_profit'] * (max_position_size / signals['position_size'])
+                    if original_size > 0:
+                        ratio = max_position_size / original_size
+                        signals['risk_amount'] = (signals.get('risk_amount') or 0) * ratio
+                        signals['potential_profit'] = (signals.get('potential_profit') or 0) * ratio
                     print(f"✅ Adjusted position size to {max_position_size:.4f} lots")
                 else:
                     print(f"❌ Cannot place trade - insufficient margin even for minimum position size")
@@ -1030,15 +1011,16 @@ class MT5TradingBot:
                     volume_step = symbol_info.get('volume_step', 0.01)
                     
                     # Ensure final position size is valid
-                    if adjusted_signals['position_size'] < min_volume:
+                    final_size = float(adjusted_signals.get('position_size') or 0)
+                    if final_size < min_volume:
                         print(f"❌ Position size {adjusted_signals['position_size']:.4f} is below minimum {min_volume}")
                         return None
-                    elif adjusted_signals['position_size'] > max_volume:
+                    elif final_size > max_volume:
                         print(f"❌ Position size {adjusted_signals['position_size']:.4f} exceeds maximum {max_volume}")
                         return None
                     
                     # Round to nearest step
-                    adjusted_signals['position_size'] = round(adjusted_signals['position_size'] / volume_step) * volume_step
+                    adjusted_signals['position_size'] = round(final_size / volume_step) * volume_step
                     print(f"📊 Final validated position size: {adjusted_signals['position_size']:.4f} lots")
             
             # Place the order
@@ -1054,7 +1036,7 @@ class MT5TradingBot:
             
             if result:
                 # Add risk amount to the result for tracking
-                result['risk_amount'] = adjusted_signals['risk_amount']
+                result['risk_amount'] = adjusted_signals.get('risk_amount')
                 
                 self.trade_history.append({
                     'timestamp': datetime.now(),
@@ -1062,22 +1044,19 @@ class MT5TradingBot:
                     'result': result,
                     'signals': adjusted_signals
                 })
-                
-                print(f"✅ Trade executed successfully")
-                print(f"   Order ID: {result['order_id']}")
-                print(f"   Entry: {result['price']}")
-                print(f"   Stop Loss: {result['sl']}")
-                print(f"   Target: {result['tp']}")
-                print(f"   Position #{len(current_positions) + 1} for {self.symbol}")
-                print(f"   Total positions: {len(current_positions) + 1}")
-            
-            return result
+                self.logger.info(
+                    f"Trade executed successfully | order_id={result.get('order_id')} entry={result.get('price')} sl={result.get('sl')} tp={result.get('tp')} pos_no={len(current_positions) + 1} symbol={self.symbol} total_positions={len(current_positions) + 1}"
+                )
+                return result
+            else:
+                self.logger.warning("Order placement returned None; trade not executed")
+                return None
             
         except Exception as e:
             print(f"❌ Error executing trade: {e}")
             return None
     
-    def monitor_positions(self):
+    def monitor_positions(self) -> List[Dict[str, Any]]:
         """
         Monitor and manage open positions
         
@@ -1145,7 +1124,7 @@ class MT5TradingBot:
             traceback.print_exc()
             return []
     
-    def close_all_positions(self):
+    def close_all_positions(self) -> bool:
         """
         Close all open positions for the symbol
         
@@ -1196,7 +1175,7 @@ class MT5TradingBot:
             print(f"❌ Error closing positions: {e}")
             return False
     
-    def close_symbol_positions(self, symbol=None):
+    def close_symbol_positions(self, symbol: Optional[str] = None) -> bool:
         """
         Close all open positions for a specific symbol
         
@@ -1244,7 +1223,7 @@ class MT5TradingBot:
             print(f"❌ Error closing positions for {target_symbol}: {e}")
             return False
     
-    def run_analysis_cycle(self):
+    def run_analysis_cycle(self) -> Optional[Dict[str, Any]]:
         """
         Run one complete analysis cycle with ML integration
         
@@ -1261,20 +1240,43 @@ class MT5TradingBot:
         
         # Try to load existing ML model first, then train if needed
         if self.use_ml and not self.model_trained:
-            # Try to load existing model
-            default_model_name = f"ml_model_{self.symbol}_{self.timeframe}.joblib"
+            # Try to load existing model from models/ directory
+            default_model_name = os.path.join('models', f"ml_model_{self.symbol}_{self.timeframe}.joblib")
             if self.load_ml_model(default_model_name):
-                print(f"✅ Loaded existing ML model: {default_model_name}")
+                self.logger.info(f"Loaded existing ML model: {default_model_name}")
             else:
-                print("🤖 Training new ML model with historical data...")
+                self.logger.info("Training new ML model with historical data...")
                 self.train_ml_model(data)
         
         # Perform traditional analysis
         if self.analysis_bot is None:
-            # Use a default account size for yfinance fallback (not used for MT5 trading)
-            default_account_size = 10000
-            self.analysis_bot = TradingBot(self.symbol, self.timeframe, "forex", 
-                                         default_account_size, self.risk_per_trade)
+            from trading_bot import TradingBot
+            # Pull live account balance from MT5 when available
+            live_account_size = 10000
+            try:
+                if self.connected and self.mt5_connector:
+                    acct = self.mt5_connector.get_account_summary()
+                    if acct and isinstance(acct, dict):
+                        # Prefer equity if available; otherwise balance
+                        live_account_size = float(acct.get('equity') or acct.get('balance') or live_account_size)
+            except Exception:
+                pass
+            self.analysis_bot = TradingBot(
+                self.symbol,
+                self.timeframe,
+                "forex",
+                live_account_size,
+                self.risk_per_trade
+            )
+        else:
+            # Keep analysis bot account size in sync with MT5 balance/equity
+            try:
+                if self.connected and self.mt5_connector:
+                    acct = self.mt5_connector.get_account_summary()
+                    if acct and isinstance(acct, dict):
+                        self.analysis_bot.account_size = float(acct.get('equity') or acct.get('balance') or self.analysis_bot.account_size)
+            except Exception:
+                pass
         
         self.analysis_bot.data = data.copy()
         analysis = self.analysis_bot.analyze_market_trend()
@@ -1356,7 +1358,7 @@ class MT5TradingBot:
         
         return analysis
     
-    def run_continuous_monitoring(self, interval_minutes=5, max_cycles=None):
+    def run_continuous_monitoring(self, interval_minutes: int = 5, max_cycles: Optional[int] = None) -> None:
         """
         Run continuous market monitoring
         
@@ -1364,25 +1366,19 @@ class MT5TradingBot:
             interval_minutes (int): Minutes between analysis cycles
             max_cycles (int): Maximum number of cycles (None for unlimited)
         """
-        print("="*60)
-        print("STARTING CONTINUOUS MARKET MONITORING")
-        print("="*60)
-        print(f"Symbol: {self.symbol}")
-        print(f"Timeframe: {self.timeframe}")
-        print(f"Interval: {interval_minutes} minutes")
-        print(f"Auto Trading: {'✅ ENABLED' if self.auto_trade else '❌ DISABLED'}")
-        print("="*60)
+        self.logger.info("STARTING CONTINUOUS MARKET MONITORING")
+        self.logger.info(f"Symbol: {self.symbol} | Timeframe: {self.timeframe} | Interval: {interval_minutes}m | Auto: {'ENABLED' if self.auto_trade else 'DISABLED'}")
         
         cycle_count = 0
         
         try:
             while True:
                 if max_cycles and cycle_count >= max_cycles:
-                    print(f"\n🛑 Reached maximum cycles ({max_cycles})")
+                    self.logger.info(f"Reached maximum cycles ({max_cycles})")
                     break
                 
                 cycle_count += 1
-                print(f"\n🔄 Cycle {cycle_count} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                self.logger.info(f"Cycle {cycle_count} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
                 
                 # Run analysis cycle
                 analysis = self.run_analysis_cycle()
@@ -1393,26 +1389,26 @@ class MT5TradingBot:
                 
                 # Wait for next cycle
                 if max_cycles is None or cycle_count < max_cycles:
-                    print(f"\n⏳ Waiting {interval_minutes} minutes for next cycle...")
+                    self.logger.info(f"Waiting {interval_minutes} minutes for next cycle...")
                     time.sleep(interval_minutes * 60)
                 
         except KeyboardInterrupt:
-            print("\n\n🛑 Monitoring stopped by user")
+            self.logger.info("Monitoring stopped by user")
         except Exception as e:
-            print(f"\n❌ Error in monitoring: {e}")
+            self.logger.exception(f"Error in monitoring: {e}")
         finally:
             # Close all positions if auto trading was enabled
             if self.auto_trade and self.connected:
-                print("\n🔒 Closing all positions...")
+                self.logger.info("Closing all positions...")
                 self.close_all_positions()
             
             # Disconnect from MT5
             if self.mt5_connector:
                 self.mt5_connector.disconnect()
             
-            print("\n✅ Monitoring session ended")
+            self.logger.info("Monitoring session ended")
     
-    def get_trading_summary(self):
+    def get_trading_summary(self) -> Dict[str, Any]:
         """
         Get trading session summary
         
@@ -1438,14 +1434,15 @@ class MT5TradingBot:
         
         return summary
     
-    def save_ml_model(self, filename=None):
+    def save_ml_model(self, filename: Optional[str] = None) -> bool:
         """Save trained ML model to file"""
         if not self.model_trained:
             print("❌ No trained model to save")
             return False
         
         if filename is None:
-            filename = f"ml_model_{self.symbol}_{self.timeframe}.joblib"
+            os.makedirs('models', exist_ok=True)
+            filename = os.path.join('models', f"ml_model_{self.symbol}_{self.timeframe}.joblib")
         
         try:
             model_data = {
@@ -1458,14 +1455,14 @@ class MT5TradingBot:
             }
             
             joblib.dump(model_data, filename)
-            print(f"✅ ML model saved to {filename}")
+            self.logger.info(f"ML model saved to {filename}")
             return True
             
         except Exception as e:
-            print(f"❌ Failed to save model: {e}")
+            self.logger.exception(f"Failed to save model: {e}")
             return False
     
-    def load_ml_model(self, filename):
+    def load_ml_model(self, filename: str) -> bool:
         """Load trained ML model from file"""
         try:
             model_data = joblib.load(filename)
@@ -1475,14 +1472,14 @@ class MT5TradingBot:
             self.feature_columns = model_data['feature_columns']
             self.model_trained = True
             
-            print(f"✅ ML model loaded from {filename}")
+            self.logger.info(f"ML model loaded from {filename}")
             return True
             
         except Exception as e:
-            print(f"❌ Failed to load model: {e}")
+            self.logger.exception(f"Failed to load model: {e}")
             return False
 
-    def analyze_smc(self, data):
+    def analyze_smc(self, data: pd.DataFrame) -> Optional[Dict[str, Any]]:
         """
         Perform Smart Money Concept analysis on the data
         
@@ -1496,7 +1493,7 @@ class MT5TradingBot:
             return None
         
         try:
-            print(f"🧠 Performing Smart Money Concept analysis for {self.symbol}...")
+            self.logger.info(f"Performing Smart Money Concept analysis for {self.symbol}...")
             
             # Initialize SMC analyzer
             self.smc_analyzer = SmartMoneyConcept(data, self.timeframe)
@@ -1510,12 +1507,8 @@ class MT5TradingBot:
             # Get SMC summary
             self.smc_summary = self.smc_analyzer.get_smc_summary()
             
-            print(f"✅ SMC Analysis Complete:")
-            print(f"   📊 Market Structure: {self.smc_summary['market_structure']['trend_direction']}")
-            print(f"   📦 Order Blocks: {self.smc_summary['order_blocks']['total_count']}")
-            print(f"   🕳️ Fair Value Gaps: {self.smc_summary['fair_value_gaps']['total_count']}")
-            print(f"   💧 Liquidity Zones: {self.smc_summary['liquidity_zones']['total_count']}")
-            print(f"   🏢 Institutional OBs: {self.smc_summary['institutional_order_blocks']['total_count']}")
+            self.logger.info("SMC Analysis Complete")
+            self.logger.info(f"Market Structure: {self.smc_summary['market_structure']['trend_direction']} | OBs: {self.smc_summary['order_blocks']['total_count']} | FVGs: {self.smc_summary['fair_value_gaps']['total_count']} | Liquidity: {self.smc_summary['liquidity_zones']['total_count']} | IOBs: {self.smc_summary['institutional_order_blocks']['total_count']}")
             
             return {
                 'signals': self.smc_signals,
@@ -1524,10 +1517,10 @@ class MT5TradingBot:
             }
             
         except Exception as e:
-            print(f"❌ Error in SMC analysis: {e}")
+            self.logger.exception(f"Error in SMC analysis: {e}")
             return None
     
-    def get_smc_trading_signals(self, current_price):
+    def get_smc_trading_signals(self, current_price: float) -> Optional[List[Dict[str, Any]]]:
         """
         Generate trading signals based on SMC analysis
         
@@ -1662,7 +1655,7 @@ class MT5TradingBot:
         
         return signals
     
-    def combine_signals(self, traditional_signals, smc_signals, ml_prediction=None):
+    def combine_signals(self, traditional_signals: Optional[Dict[str, Any]], smc_signals: Optional[List[Dict[str, Any]]], ml_prediction: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
         """
         Combine traditional, SMC, and ML signals for final decision
         
@@ -1776,7 +1769,7 @@ class MT5TradingBot:
         
         # Only return signal if strength is sufficient
         if combined_signal['signal_strength'] < 0.5:
-            print(f"⚠️  Combined signal strength too low: {combined_signal['signal_strength']:.2f}")
+            self.logger.warning(f"Combined signal strength too low: {combined_signal['signal_strength']:.2f}")
             return None
         
         return combined_signal
@@ -1849,12 +1842,10 @@ def main():
         
         # Get summary
         summary = bot.get_trading_summary()
-        print(f"\n📈 Trading Summary:")
-        print(f"   Total Trades: {summary['total_trades']}")
-        print(f"   Open Positions: {summary['open_positions']}")
-        print(f"   Total Profit: ${summary['total_profit']:.2f}")
-        print(f"   ML Enabled: {'✅' if summary['ml_enabled'] else '❌'}")
-        print(f"   Model Trained: {'✅' if summary['model_trained'] else '❌'}")
+        import logging as _logging
+        _logging.getLogger('mt5_trading_bot').info(
+            f"Trading Summary | trades={summary['total_trades']} open={summary['open_positions']} profit=${summary['total_profit']:.2f} ml={'ENABLED' if summary['ml_enabled'] else 'DISABLED'} trained={'YES' if summary['model_trained'] else 'NO'}"
+        )
     
     # Save ML model if trained
     if bot.use_ml and bot.model_trained:

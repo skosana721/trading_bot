@@ -1,62 +1,47 @@
-# Dynamic Trading Bot - XM Integration
+# 🤖 Unified Trading Bot System
 
-A comprehensive automated trading bot with MetaTrader 5 integration, featuring advanced technical analysis, machine learning, and Smart Money Concepts (SMC) for enhanced trading signals.
+A comprehensive trading bot system that combines manual analysis, automated trading, and MT5 integration into a unified platform.
 
-## 🚀 Recent Improvements
+## 🚀 What's New
 
-### Enhanced Error Handling & Monitoring
-- **Comprehensive Error Management**: Custom exception classes with severity levels and categories
-- **Performance Monitoring**: Real-time tracking of execution times and system metrics
-- **Centralized Logging**: Structured logging with file rotation and multiple log levels
-- **Error Recovery**: Automatic retry mechanisms with exponential backoff
-- **Alert System**: Configurable alerts for critical errors and performance issues
+### 🔄 Complete Migration
+- **Enhanced Trading Bot**: The old `trading_bot.py` now supports both manual and automated trading
+- **Unified Interface**: Single entry point for all trading functionality
+- **Backward Compatibility**: All existing functionality preserved
+- **New Capabilities**: MT5 integration, automated trading, and enhanced analysis
 
-### Configuration Management
-- **Centralized Configuration**: Type-safe configuration management with validation
-- **Environment Variable Support**: Flexible configuration through .env files
-- **Runtime Validation**: Automatic validation of trading parameters and settings
-- **Configuration Hot-Reloading**: Dynamic configuration updates without restart
+### 🎯 Key Features
 
-### Frontend Enhancements
-- **Improved User Experience**: Better loading states, error handling, and feedback
-- **Real-time Status Updates**: Automatic status polling with connection health monitoring
-- **Enhanced Error Display**: Detailed error information with retry options
-- **Responsive Design**: Better mobile compatibility and accessibility
-- **Performance Metrics**: Real-time display of system performance and trading metrics
+#### 📊 Enhanced Trading Bot (`trading_bot.py`)
+- **Manual Analysis**: Traditional yfinance-based analysis with trend identification
+- **Automated Trading**: MT5 integration for automated trade execution
+- **Multi-Market Support**: Stocks, Forex, Crypto, and Commodities
+- **Risk Management**: Advanced position sizing and risk control
+- **Continuous Automation**: 24/7 automated trading with periodic analysis
 
-### Trading Bot Improvements
-- **Robust Position Sizing**: Dynamic position sizing based on real-time account balance
-- **Enhanced Risk Management**: Multi-level risk controls and position limits
-- **Connection Resilience**: Automatic reconnection and connection health monitoring
-- **Volume Validation**: Strict compliance with broker volume requirements
-- **Margin Management**: Intelligent margin checking and position size adjustment
+#### 🤖 Automated Trading Bot (`automated_trading_bot.py`)
+- **Full Automation**: Completely autonomous trading system
+- **Multi-Symbol Trading**: Analyzes 5 major currency pairs simultaneously
+- **AI-Powered Analysis**: Machine learning models for signal generation
+- **Smart Money Concepts**: Advanced market structure analysis
+- **Real-time Monitoring**: Continuous position and market monitoring
 
-## 🏗️ Architecture
+#### 🌐 Web Interface (`app.py`)
+- **Unified API**: Single API supporting both manual and automated trading
+- **Enhanced Endpoints**: New endpoints for enhanced trading bot functionality
+- **Real-time Status**: Live monitoring of bot status and positions
+- **Interactive Controls**: Start/stop automation, position management
 
-```
-trading_bot/
-├── app.py                 # Flask backend API
-├── config.py              # Configuration management
-├── error_handler.py       # Error handling and monitoring
-├── mt5_connector.py       # MT5 integration layer
-├── mt5_trading_bot.py     # Core trading logic
-├── smart_money_concept.py # SMC analysis
-├── templates/
-│   └── index.html         # Vue.js frontend
-├── logs/                  # Application logs
-├── requirements.txt       # Python dependencies
-└── README.md             # This file
-```
+## 📋 Prerequisites
+
+- Python 3.8 or higher
+- MetaTrader 5 terminal installed and running
+- XM trading account (demo or live)
+- Internet connection for market data
 
 ## 🛠️ Installation
 
-### Prerequisites
-- Python 3.8+
-- MetaTrader 5 terminal
-- XM trading account (demo or live)
-
-### Setup
-1. **Clone the repository**
+1. **Clone or download the project**
    ```bash
    git clone <repository-url>
    cd trading_bot
@@ -67,207 +52,259 @@ trading_bot/
    pip install -r requirements.txt
    ```
 
-3. **Configure environment variables**
-   ```bash
-   cp xm_config_example.txt .env
-   # Edit .env with your XM credentials
-   ```
+3. Credentials: enter account number, password, and server via the web UI. Do not store XM credentials in `.env`.
+   You may still configure non-credential settings in `.env` (e.g., `RISK_PER_TRADE`, `USE_ML`).
 
-4. **Run the setup script**
-   ```bash
-   python setup_mt5.py
-   ```
+## 🚀 Quick Start
 
-5. **Start the application**
+### Option 1: Unified Startup Script (Recommended)
    ```bash
+# Test MT5 connection
+python start_unified_bot.py test
+
+# Run enhanced trading bot with automation
+python start_unified_bot.py enhanced --symbol EURUSD --timeframe 5m
+
+# Run fully automated trading bot
+python start_unified_bot.py automated
+
+# Run web interface
+python start_unified_bot.py web
+```
+
+### Option 2: Individual Components
+   ```bash
+# Enhanced trading bot (manual + automated)
+python start_automated_bot.py
+
+# Original automated trading bot
+python automated_trading_bot.py
+
+# Web interface
    python app.py
    ```
 
-## 📊 Features
+### Option 3: Direct Python Usage
+```python
+from trading_bot import TradingBot
 
-### Core Trading Features
-- **Multi-Timeframe Analysis**: Support for 1m to 1d timeframes
-- **Technical Analysis**: RSI, MACD, Bollinger Bands, ATR, and more
-- **Machine Learning**: Random Forest classifier for price prediction
-- **Smart Money Concepts**: Order blocks, fair value gaps, liquidity zones
-- **Risk Management**: Configurable risk per trade and position limits
-- **Auto Trading**: Fully automated trading with manual override options
+# Create enhanced trading bot
+bot = TradingBot(
+    symbol='EURUSD',
+    period='5m',
+    market_type='forex',
+    enable_automation=True
+)
 
-### Advanced Features
-- **Real-time Monitoring**: Live position tracking and P&L monitoring
-- **Performance Analytics**: Detailed trading performance metrics
-- **Error Recovery**: Automatic error handling and system recovery
-- **Configuration Management**: Centralized settings with validation
-- **Logging & Monitoring**: Comprehensive logging and performance tracking
+# Connect to MT5
+bot.connect_mt5()
 
-## 🔧 Configuration
+# Run automated analysis
+result = bot.run_automated_analysis_cycle()
 
-### Environment Variables
-```bash
-# XM Account Configuration
-XM_ACCOUNT_NUMBER=your_account_number
-XM_PASSWORD=your_password
-XM_SERVER=XMGlobal-Demo  # or XMGlobal-Live
-
-# Trading Parameters
-TRADING_SYMBOL=EURUSD
-TRADING_TIMEFRAME=5m
-RISK_PER_TRADE=0.02  # 2%
-
-# System Configuration
-LOG_LEVEL=INFO
-AUTO_TRADE=false
-USE_ML=true
-USE_SMC=true
-
-# Risk Management
-MAX_POSITIONS_PER_SYMBOL=3
-MAX_SAME_DIRECTION_POSITIONS=2
-MAX_DAILY_TRADES=10
-MAX_DAILY_LOSS=0.05  # 5%
+# Start continuous automation
+bot.run_continuous_automation(interval_minutes=5)
 ```
 
-### Trading Parameters
-- **Risk Per Trade**: 0.1% to 10% of account balance
-- **Position Limits**: Configurable per-symbol and direction limits
-- **Daily Limits**: Maximum trades and loss limits per day
-- **Timeframes**: 1m, 5m, 15m, 30m, 1h, 4h, 1d
+## 🌐 Web Interface
 
-## 📈 Usage
+Once started, access the web interface at: **http://localhost:5000**
 
-### Web Interface
-1. Open `http://localhost:5000` in your browser
-2. Enter your XM credentials
-3. Configure trading parameters
-4. Connect to MT5
-5. Start automated trading
+### Available Features:
+- **Enhanced Trading Bot**: Manual and automated trading capabilities
+- **Automated Trading Bot**: Fully automated MT5 trading
+- **Connection Management**: MT5 connection controls
+- **Real-time Analysis**: Live market analysis and signals
+- **Position Management**: View and manage open positions
+- **Configuration**: Bot settings and parameters
 
-### API Endpoints
-- `GET /api/config` - Get current configuration
-- `POST /api/config` - Update configuration
+### API Endpoints:
+
+#### Enhanced Trading Bot
+- `POST /api/enhanced/initialize` - Initialize enhanced trading bot
+- `POST /api/enhanced/connect` - Connect to MT5
+- `POST /api/enhanced/analyze` - Run manual analysis
+- `POST /api/enhanced/automated-analysis` - Run automated analysis cycle
+- `POST /api/enhanced/execute-trade` - Execute trade
+- `POST /api/enhanced/start-automation` - Start continuous automation
+- `POST /api/enhanced/stop-automation` - Stop automation
+- `GET /api/enhanced/status` - Get bot status
+- `GET /api/enhanced/positions` - Get MT5 positions
+- `POST /api/enhanced/close-position` - Close position
+- `GET /api/enhanced/capabilities` - Get capabilities
+
+#### Original Trading Bot (Still Available)
 - `POST /api/connect` - Connect to MT5
-- `POST /api/analyze` - Perform market analysis
-- `POST /api/start-trading` - Start automated trading
-- `POST /api/stop-trading` - Stop automated trading
-- `GET /api/status` - Get system status
-- `GET /api/positions` - Get open positions
+- `POST /api/analyze` - Run analysis
+- `POST /api/start-trading` - Start trading
+- `POST /api/stop-trading` - Stop trading
+- `GET /api/status` - Get status
+- `GET /api/positions` - Get positions
 
-## 🔍 Error Handling
+## ⚙️ Configuration
 
-### Error Categories
-- **Connection Errors**: MT5 connection issues
-- **Trading Errors**: Order execution failures
-- **Analysis Errors**: Market analysis problems
-- **Data Errors**: Data retrieval issues
-- **Configuration Errors**: Invalid settings
-- **System Errors**: General system issues
+### Environment Variables
 
-### Error Severity Levels
-- **LOW**: Informational messages
-- **MEDIUM**: Warnings and non-critical issues
-- **HIGH**: Important issues requiring attention
-- **CRITICAL**: System-threatening errors
+Only non-credential variables are used from `.env`:
 
-### Error Recovery
-- Automatic retry with exponential backoff
-- Connection health monitoring
-- Graceful degradation of features
-- Detailed error logging and reporting
+| Variable | Description | Default | Example |
+|----------|-------------|---------|---------|
+| `RISK_PER_TRADE` | Risk per trade percentage | `0.02` | `0.02` (2%) |
+| `USE_ML` | Enable machine learning | `true` | `true` |
+| `ENABLE_AUTOMATION` | Enable automated trading | `true` | `true` |
+| `MAX_POSITIONS_PER_SYMBOL` | Max positions per symbol | `3` | `3` |
+| `ANALYSIS_INTERVAL` | Analysis interval in seconds | `300` | `300` (5 min) |
 
-## 📊 Performance Monitoring
+### Trading Parameters
 
-### Metrics Tracked
-- **Execution Times**: Function and API call performance
-- **Error Rates**: Error frequency and types
-- **Connection Health**: MT5 connection stability
-- **Trading Performance**: Win rate, profit/loss, drawdown
-- **System Resources**: Memory usage, CPU utilization
+#### Enhanced Trading Bot
+- **Symbol**: Any supported symbol (EURUSD, GBPUSD, etc.)
+- **Timeframe**: 1m, 5m, 15m, 30m, 1h, 4h, 1d
+- **Market Type**: stock, forex, crypto, commodities
+- **Risk Management**: Automatic position sizing
+- **Automation**: Optional MT5 integration
 
-### Monitoring Features
-- Real-time performance dashboards
-- Historical performance analysis
-- Automated alerting for issues
-- Performance trend analysis
+#### Automated Trading Bot
+- **Symbols**: EURUSD, GBPUSD, USDJPY, USDCHF, AUDUSD
+- **Timeframes**: 5m, 15m, 1h
+- **Risk Management**: 2% risk per trade
+- **Automation**: Fully automated with ML signals
 
-## 🛡️ Security
+## 🔧 Migration Guide
 
-### Security Features
-- **Credential Management**: Secure storage of trading credentials
-- **Input Validation**: Comprehensive validation of all inputs
-- **Error Sanitization**: Safe error message handling
-- **Access Control**: API endpoint protection
-- **Audit Logging**: Complete audit trail of all actions
+### From Old Trading Bot
+The old `trading_bot.py` functionality is fully preserved and enhanced:
 
-### Best Practices
-- Use demo accounts for testing
-- Regularly update credentials
-- Monitor system logs
-- Implement proper backup procedures
-- Follow risk management guidelines
+```python
+# Old way (still works)
+bot = TradingBot('EURUSD', '5m', 'forex')
+bot.fetch_data()
+bot.identify_higher_highs_lows()
 
-## 🚨 Risk Warning
+# New way (with automation)
+bot = TradingBot('EURUSD', '5m', 'forex', enable_automation=True)
+bot.connect_mt5()
+bot.run_continuous_automation()
+```
 
-**Trading involves substantial risk of loss and is not suitable for all investors. The high degree of leverage can work against you as well as for you. Before deciding to trade, you should carefully consider your investment objectives, level of experience, and risk appetite.**
+### From Automated Trading Bot
+The automated trading bot remains unchanged and can be used independently:
 
-### Risk Management Features
-- Configurable position sizing
-- Stop-loss and take-profit orders
-- Maximum position limits
-- Daily loss limits
-- Automatic position monitoring
+```python
+# Still works as before
+from automated_trading_bot import AutomatedTradingBot
+bot = AutomatedTradingBot()
+bot.run()
+```
 
-## 🔧 Development
+### New Unified Approach
+Use the unified startup script for the best experience:
 
-### Code Quality
-- Type hints and documentation
-- Comprehensive error handling
-- Unit tests and integration tests
-- Code linting and formatting
-- Performance optimization
+```bash
+# Test everything first
+python start_unified_bot.py test
 
-### Contributing
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
+# Run with your preferred mode
+python start_unified_bot.py enhanced --symbol EURUSD --timeframe 5m
+python start_unified_bot.py automated
+python start_unified_bot.py web
+```
 
-## 📝 Changelog
+## 📊 Features Comparison
 
-### Version 2.0.0 (Current)
-- **Major**: Enhanced error handling and monitoring system
-- **Major**: Centralized configuration management
-- **Major**: Improved frontend with better UX
-- **Major**: Robust position sizing and risk management
-- **Minor**: Performance optimizations and bug fixes
+| Feature | Enhanced Bot | Automated Bot | Web Interface |
+|---------|-------------|---------------|---------------|
+| Manual Analysis | ✅ | ❌ | ✅ |
+| Automated Trading | ✅ | ✅ | ✅ |
+| MT5 Integration | ✅ | ✅ | ✅ |
+| Multi-Market | ✅ | ❌ | ✅ |
+| Risk Management | ✅ | ✅ | ✅ |
+| Position Management | ✅ | ✅ | ✅ |
+| Real-time Monitoring | ✅ | ✅ | ✅ |
+| Web API | ✅ | ✅ | ✅ |
+| Continuous Automation | ✅ | ✅ | ✅ |
 
-### Version 1.0.0
-- Initial release with basic trading functionality
-- MT5 integration
-- Technical analysis features
-- Web interface
+## 🛡️ Risk Management
+
+### Enhanced Trading Bot
+- **Position Sizing**: Automatic calculation based on account balance
+- **Stop Loss**: Automatic stop loss placement
+- **Take Profit**: Risk-reward ratio optimization
+- **Maximum Positions**: Configurable limits per symbol
+- **Risk Per Trade**: Configurable percentage (default 2%)
+
+### Automated Trading Bot
+- **Risk Per Trade**: 2% of account balance
+- **Maximum Positions**: 3 positions per symbol
+- **Stop Loss**: Automatic placement
+- **Take Profit**: 1:3 risk-reward ratio
+- **Signal Confidence**: 70% minimum confidence threshold
+
+## 🔍 Troubleshooting
+
+### Common Issues
+
+1. **MT5 Connection Failed**
+   ```bash
+   python start_unified_bot.py test
+   ```
+   Check your credentials in `.env` file
+
+2. **Import Errors**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Port Already in Use**
+   ```bash
+   python start_unified_bot.py web --port 5001
+   ```
+
+4. **Automation Not Working**
+   - Check MT5 connection
+   - Verify credentials
+   - Check log files in `logs/` directory
+
+### Log Files
+- `logs/unified_bot.log` - Unified bot logs
+- `logs/trading_bot.log` - Web interface logs
+- `logs/automated_trading_bot.log` - Automated bot logs
+
+## 📈 Performance Monitoring
+
+### Enhanced Trading Bot
+- Real-time status monitoring
+- Performance metrics
+- Position tracking
+- Risk analysis
+
+### Automated Trading Bot
+- Signal accuracy tracking
+- Profit/loss monitoring
+- Position management
+- Market analysis logs
+
+## 🔮 Future Enhancements
+
+- **Advanced ML Models**: More sophisticated prediction models
+- **Portfolio Management**: Multi-symbol portfolio optimization
+- **Backtesting**: Historical performance analysis
+- **Mobile App**: Mobile interface for monitoring
+- **Alerts**: Email/SMS notifications
+- **Advanced Analytics**: Detailed performance reports
 
 ## 📞 Support
 
-For support and questions:
-- Check the logs in the `logs/` directory
-- Review error messages in the web interface
-- Consult the configuration documentation
-- Open an issue on GitHub
+For issues and questions:
+1. Check the troubleshooting section
+2. Review log files
+3. Test with connection test mode
+4. Verify configuration settings
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🙏 Acknowledgments
-
-- MetaTrader 5 for trading platform integration
-- XM for broker services
-- Vue.js for frontend framework
-- Flask for backend API
-- Technical analysis libraries (ta, pandas, numpy)
-- Machine learning libraries (scikit-learn)
+This project is for educational purposes. Use at your own risk. Trading involves substantial risk of loss.
 
 ---
 
-**Disclaimer**: This software is for educational and research purposes. Use at your own risk. The authors are not responsible for any financial losses incurred through the use of this software.
+**Happy Trading! 🚀**
