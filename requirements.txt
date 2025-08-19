@@ -13,6 +13,14 @@ ta
 # Machine Learning
 scikit-learn
 joblib
+xgboost
+lightgbm
+
+# Deep Learning (optional)
+tensorflow
+
+# Technical Analysis
+TA-Lib
 
 # Visualization
 matplotlib

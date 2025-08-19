@@ -94,17 +94,15 @@ def run_enhanced_bot(symbol, timeframe, market_type='forex', enable_automation=T
     logger.info(f"Starting Enhanced Trading Bot for {symbol} ({timeframe})")
     
     try:
-        from trading_bot import TradingBot
+        from mt5_trading_bot import MT5TradingBot
         
         # Create enhanced trading bot
-        bot = TradingBot(
+        bot = MT5TradingBot(
             symbol=symbol,
-            period=timeframe,
-            market_type=market_type,
-            account_size=10000,
+            timeframe=timeframe,
             risk_per_trade=float(os.getenv('RISK_PER_TRADE', 0.02)),
-            enable_automation=enable_automation,
-            mt5_config={}
+            use_mt5_data=True,
+            auto_trade=enable_automation
         )
         
         logger.info("Enhanced Trading Bot initialized successfully")

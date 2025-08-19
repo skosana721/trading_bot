@@ -67,6 +67,31 @@ class MT5Connector:
             bool: True if connection successful, False otherwise
         """
         try:
+            # Validate and/or populate credentials before initializing MT5
+            if not self.account_number or not self.password or not self.server:
+                # Try environment variables as a fallback
+                env_account = os.getenv('XM_ACCOUNT_NUMBER') or os.getenv('MT5_ACCOUNT') or os.getenv('ACCOUNT_NUMBER')
+                env_password = os.getenv('XM_PASSWORD') or os.getenv('MT5_PASSWORD') or os.getenv('PASSWORD')
+                env_server = os.getenv('XM_SERVER') or os.getenv('MT5_SERVER') or self.server
+                if env_account and env_password and env_server:
+                    self.account_number = env_account
+                    self.password = env_password
+                    self.server = env_server
+
+            # Ensure we have valid, non-empty credentials
+            if not self.account_number or not self.password or not self.server:
+                self.last_error = "Missing MT5 credentials (account_number/password/server)"
+                self.logger.error(self.last_error)
+                return False
+
+            # Validate account number is numeric
+            try:
+                login_int = int(str(self.account_number).strip())
+            except Exception:
+                self.last_error = f"Invalid account number: {self.account_number}"
+                self.logger.error(self.last_error)
+                return False
+
             # Initialize MT5
             if not mt5.initialize():
                 self.last_error = mt5.last_error()
@@ -75,7 +100,7 @@ class MT5Connector:
             
             # Login to XM account
             if not mt5.login(
-                login=int(self.account_number),
+                login=login_int,
                 password=self.password,
                 server=self.server
             ):

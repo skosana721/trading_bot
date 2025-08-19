@@ -29,6 +29,33 @@ except ImportError:
     _logging.getLogger('mt5_trading_bot').warning("ML libraries not available. Install with: pip install scikit-learn joblib")
     ML_AVAILABLE = False
 
+# ML Ensemble
+try:
+    from ml_ensemble import MLEnsemble
+    ENSEMBLE_AVAILABLE = True
+except ImportError:
+    import logging as _logging
+    _logging.getLogger('mt5_trading_bot').warning("ML Ensemble module not available")
+    ENSEMBLE_AVAILABLE = False
+
+# Market Structure Strategy
+try:
+    from market_structure_strategy import MarketStructureStrategy
+    MARKET_STRUCTURE_AVAILABLE = True
+except ImportError:
+    import logging as _logging
+    _logging.getLogger('mt5_trading_bot').warning("Market Structure Strategy module not available")
+    MARKET_STRUCTURE_AVAILABLE = False
+
+# Reinforcement Learning Trader
+try:
+    from reinforcement_learning_trader import ReinforcementLearningTrader
+    RL_AVAILABLE = True
+except ImportError:
+    import logging as _logging
+    _logging.getLogger('mt5_trading_bot').warning("Reinforcement Learning Trader module not available")
+    RL_AVAILABLE = False
+
 # Technical Analysis
 try:
     import ta
@@ -83,6 +110,44 @@ class MT5TradingBot:
         self.feature_columns = []
         self.model_trained = False
         self.prediction_threshold = 0.65  # Confidence threshold for ML signals
+        
+        # ML Ensemble Components
+        self.ml_ensemble = None
+        self.use_ensemble = use_ml and ENSEMBLE_AVAILABLE
+        if self.use_ensemble:
+            self.ml_ensemble = MLEnsemble(symbol, timeframe, use_deep_learning=True)
+        
+        # Market Structure Strategy Components
+        self.market_structure_strategy = None
+        self.use_market_structure = MARKET_STRUCTURE_AVAILABLE
+        if self.use_market_structure:
+            # Default configuration for market structure strategy
+            strategy_config = {
+                'UsePairs': [symbol],
+                'LotSizeInitial': 0.01,
+                'LotSizeReEntry': 0.01,
+                'RiskPerTrade': 2.0,
+                'RiskRewardRatio': 2.0,
+                'SL_Buffer_Pips': 10,
+                'TP_Multiplier': 2.0,
+                'EnableTrailingStop': False,
+                'TrailStartProfitPips': 50,
+                'TrailStepPips': 10
+            }
+            self.market_structure_strategy = MarketStructureStrategy(strategy_config)
+        
+        # Reinforcement Learning Components
+        self.rl_trader = None
+        self.use_rl = use_ml and RL_AVAILABLE
+        if self.use_rl:
+            self.rl_trader = ReinforcementLearningTrader(
+                learning_rate=0.1,
+                discount_factor=0.95,
+                epsilon=0.3,
+                epsilon_decay=0.995,
+                epsilon_min=0.01,
+                model_path=f"models/rl_trader_{symbol}_{timeframe}.pkl"
+            )
         
         # SMC Components
         self.smc_analyzer = None
@@ -282,6 +347,15 @@ class MT5TradingBot:
         df['close_rolling_std_5'] = df['Close'].rolling(window=5).std()
         df['volume_rolling_mean_5'] = df['Volume'].rolling(window=5).mean()
         
+        # Handle infinities and NaNs to ensure prediction can run on latest row
+        try:
+            df.replace([np.inf, -np.inf], np.nan, inplace=True)
+            # Forward/backward fill technical columns to remove NaNs on recent rows
+            df.fillna(method='ffill', inplace=True)
+            df.fillna(method='bfill', inplace=True)
+        except Exception:
+            pass
+
         return df
     
     def create_target_variable(self, data: pd.DataFrame, lookforward: int = 5) -> pd.Series:
@@ -349,7 +423,7 @@ class MT5TradingBot:
     
     def train_ml_model(self, data: pd.DataFrame) -> bool:
         """
-        Train machine learning model
+        Train machine learning model (ensemble if available, otherwise single model)
         
         Args:
             data (pd.DataFrame): Historical price data
@@ -362,7 +436,17 @@ class MT5TradingBot:
             return False
         
         try:
-            self.logger.info("Training ML model...")
+            # Use ensemble if available
+            if self.use_ensemble and self.ml_ensemble:
+                self.logger.info("Training ML ensemble models...")
+                success = self.ml_ensemble.train_models(data)
+                if success:
+                    self.model_trained = True
+                    self.logger.info("ML ensemble models trained successfully")
+                return success
+            
+            # Fallback to single model
+            self.logger.info("Training single ML model...")
             
             # Create technical features
             data_with_features = self.create_technical_features(data)
@@ -400,7 +484,7 @@ class MT5TradingBot:
             # Cross-validation
             cv_scores = cross_val_score(self.ml_model, X_train_scaled, y_train, cv=5)
             
-            self.logger.info("ML Model Trained Successfully")
+            self.logger.info("Single ML Model Trained Successfully")
             self.logger.info(f"Training Accuracy: {train_score:.3f} | Test: {test_score:.3f} | CV: {cv_scores.mean():.3f} (+/- {cv_scores.std() * 2:.3f}) | Features: {len(feature_names)}")
             
             # Feature importance
@@ -422,7 +506,7 @@ class MT5TradingBot:
     
     def get_ml_prediction(self, data: pd.DataFrame) -> Optional[Dict[str, Any]]:
         """
-        Get ML prediction for current market conditions
+        Get ML prediction for current market conditions (ensemble if available, otherwise single model)
         
         Args:
             data (pd.DataFrame): Current market data
@@ -434,6 +518,26 @@ class MT5TradingBot:
             return None
         
         try:
+            # Use ensemble if available
+            if self.use_ensemble and self.ml_ensemble:
+                ensemble_prediction = self.ml_ensemble.get_ensemble_prediction(data)
+                if ensemble_prediction:
+                    return {
+                        'prediction': ensemble_prediction['prediction'],
+                        'confidence': ensemble_prediction['confidence'],
+                        'buy_probability': ensemble_prediction['confidence'] if ensemble_prediction['prediction'] == 1 else 1 - ensemble_prediction['confidence'],
+                        'sell_probability': 1 - ensemble_prediction['confidence'] if ensemble_prediction['prediction'] == 1 else ensemble_prediction['confidence'],
+                        'signal_strength': ensemble_prediction['confidence'],
+                        'ensemble_details': {
+                            'individual_predictions': ensemble_prediction.get('individual_predictions', {}),
+                            'individual_confidences': ensemble_prediction.get('individual_confidences', {}),
+                            'ensemble_weights': ensemble_prediction.get('ensemble_weights', {}),
+                            'agreement_ratio': ensemble_prediction.get('agreement_ratio', 0),
+                            'model_count': ensemble_prediction.get('model_count', 0)
+                        }
+                    }
+            
+            # Fallback to single model
             # Create technical features
             data_with_features = self.create_technical_features(data)
             
@@ -448,12 +552,15 @@ class MT5TradingBot:
                 self.logger.warning(f"Missing feature columns: {missing_columns}")
                 return None
             
-            # Use the most recent row with complete features
-            feature_frame = data_with_features[self.feature_columns].dropna(axis=0, how='any')
-            if feature_frame.empty:
-                self.logger.warning("All recent rows contain NaNs for required features; cannot run ML prediction")
+            # Use the most recent row, tolerating prior NaNs by filling
+            feature_frame = data_with_features[self.feature_columns].copy()
+            feature_frame.replace([np.inf, -np.inf], np.nan, inplace=True)
+            feature_frame.fillna(method='ffill', inplace=True)
+            feature_frame.fillna(method='bfill', inplace=True)
+            latest_data = feature_frame.tail(1)
+            if latest_data.isnull().any(axis=1).iloc[0]:
+                self.logger.warning("Latest row still contains NaNs after fills; skipping ML prediction this cycle")
                 return None
-            latest_data = feature_frame.tail(1).copy()
             
             # Scale features
             latest_scaled = self.scaler.transform(latest_data)
@@ -521,14 +628,24 @@ class MT5TradingBot:
                         self.train_ml_model(self.analysis_bot.data)
                 ml_prediction = self.get_ml_prediction(self.analysis_bot.data)
             
-            # 4. Get SMC trading signals
+            # 4. Market Structure Analysis
+            market_structure_analysis = None
+            if self.use_market_structure:
+                market_structure_analysis = self.run_market_structure_analysis()
+            
+            # 5. Reinforcement Learning Analysis
+            rl_analysis = None
+            if self.use_rl:
+                rl_analysis = self.run_rl_analysis()
+            
+            # 6. Get SMC trading signals
             smc_signals = None
             if smc_results and self.smc_signals:
                 current_price = data['Close'].iloc[-1]
                 smc_signals = self.get_smc_trading_signals(current_price)
             
             # 5. Combine all signals
-            combined_signal = self.combine_signals(traditional_signals, smc_signals, ml_prediction)
+            combined_signal = self.combine_signals(traditional_signals, smc_signals, ml_prediction, market_structure_analysis, rl_analysis)
             
             # Store analysis results
             self.last_analysis = {
@@ -1013,8 +1130,20 @@ class MT5TradingBot:
                     # Ensure final position size is valid
                     final_size = float(adjusted_signals.get('position_size') or 0)
                     if final_size < min_volume:
-                        print(f"❌ Position size {adjusted_signals['position_size']:.4f} is below minimum {min_volume}")
-                        return None
+                        print(f"⚠️  Position size {final_size:.4f} is below minimum {min_volume}. Using minimum volume.")
+                        # Scale risk/profit amounts proportionally if present
+                        old_size = final_size if final_size > 0 else None
+                        adjusted_signals['position_size'] = min_volume
+                        final_size = min_volume
+                        if old_size and old_size > 0:
+                            try:
+                                ratio = final_size / old_size
+                                if adjusted_signals.get('risk_amount') is not None:
+                                    adjusted_signals['risk_amount'] = (adjusted_signals['risk_amount'] or 0) * ratio
+                                if adjusted_signals.get('potential_profit') is not None:
+                                    adjusted_signals['potential_profit'] = (adjusted_signals['potential_profit'] or 0) * ratio
+                            except Exception:
+                                pass
                     elif final_size > max_volume:
                         print(f"❌ Position size {adjusted_signals['position_size']:.4f} exceeds maximum {max_volume}")
                         return None
@@ -1465,6 +1594,11 @@ class MT5TradingBot:
     def load_ml_model(self, filename: str) -> bool:
         """Load trained ML model from file"""
         try:
+            # Avoid noisy stack traces when the model file doesn't exist yet
+            if not os.path.exists(filename):
+                self.logger.info(f"ML model not found at {filename}. A new model will be trained when needed.")
+                return False
+
             model_data = joblib.load(filename)
             
             self.ml_model = model_data['model']
@@ -1476,7 +1610,8 @@ class MT5TradingBot:
             return True
             
         except Exception as e:
-            self.logger.exception(f"Failed to load model: {e}")
+            # Log as error but without full traceback, then allow training fallback
+            self.logger.error(f"Failed to load model from {filename}: {e}")
             return False
 
     def analyze_smc(self, data: pd.DataFrame) -> Optional[Dict[str, Any]]:
@@ -1655,7 +1790,7 @@ class MT5TradingBot:
         
         return signals
     
-    def combine_signals(self, traditional_signals: Optional[Dict[str, Any]], smc_signals: Optional[List[Dict[str, Any]]], ml_prediction: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    def combine_signals(self, traditional_signals: Optional[Dict[str, Any]], smc_signals: Optional[List[Dict[str, Any]]], ml_prediction: Optional[Dict[str, Any]] = None, market_structure_analysis: Optional[Dict[str, Any]] = None, rl_analysis: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
         """
         Combine traditional, SMC, and ML signals for final decision
         
@@ -1728,6 +1863,25 @@ class MT5TradingBot:
                         combined_signal['signal_strength'] = strongest_smc['strength']
                         combined_signal['signal_sources'] = [strongest_smc['source']]
         
+        # Process Market Structure Analysis
+        if market_structure_analysis and self.use_market_structure:
+            market_signal = market_structure_analysis.get('signal')
+            if market_signal:
+                # Market structure signal is very strong - it can override other signals
+                if market_signal.confidence >= 0.7:
+                    combined_signal['signal_type'] = market_signal.entry_type.value.upper()
+                    combined_signal['entry_price'] = market_signal.entry_price
+                    combined_signal['stop_loss'] = market_signal.stop_loss
+                    combined_signal['target'] = market_signal.take_profit
+                    combined_signal['signal_strength'] = market_signal.confidence
+                    combined_signal['signal_sources'] = ['Market_Structure']
+                    combined_signal['market_structure_analysis'] = market_structure_analysis
+                else:
+                    # Market structure signal is moderate - enhance existing signal
+                    if combined_signal['signal_type'] == market_signal.entry_type.value.upper():
+                        combined_signal['signal_strength'] = min(1.0, combined_signal['signal_strength'] + market_signal.confidence * 0.3)
+                        combined_signal['signal_sources'].append('Market_Structure')
+        
         # Process ML prediction
         if ml_prediction and self.use_ml:
             ml_confidence = ml_prediction.get('confidence', 0)
@@ -1749,6 +1903,37 @@ class MT5TradingBot:
                         # ML disagrees with bullish signal
                         combined_signal['signal_strength'] = combined_signal['signal_strength'] * 0.5
                     combined_signal['signal_sources'].append('ML_Bearish')
+        
+        # Process Reinforcement Learning Analysis
+        if rl_analysis and self.use_rl:
+            rl_signal = rl_analysis.get('signal_type')
+            rl_confidence = rl_analysis.get('confidence', 0)
+            rl_action = rl_analysis.get('action')
+            
+            if rl_confidence >= 0.6:  # RL signal threshold
+                if rl_action == 'buy' and rl_signal == 'BUY':
+                    if combined_signal['signal_type'] == 'BUY':
+                        combined_signal['signal_strength'] = min(1.0, combined_signal['signal_strength'] + rl_confidence * 0.3)
+                    elif combined_signal['signal_type'] == 'SELL':
+                        # RL strongly disagrees with bearish signal
+                        combined_signal['signal_strength'] = combined_signal['signal_strength'] * 0.3
+                    combined_signal['signal_sources'].append('RL_Bullish')
+                
+                elif rl_action == 'sell' and rl_signal == 'SELL':
+                    if combined_signal['signal_type'] == 'SELL':
+                        combined_signal['signal_strength'] = min(1.0, combined_signal['signal_strength'] + rl_confidence * 0.3)
+                    elif combined_signal['signal_type'] == 'BUY':
+                        # RL strongly disagrees with bullish signal
+                        combined_signal['signal_strength'] = combined_signal['signal_strength'] * 0.3
+                    combined_signal['signal_sources'].append('RL_Bearish')
+                
+                elif rl_action == 'hold':
+                    # RL suggests holding - reduce signal strength
+                    combined_signal['signal_strength'] = combined_signal['signal_strength'] * 0.7
+                    combined_signal['signal_sources'].append('RL_Hold')
+                
+                # Add RL analysis to combined signal
+                combined_signal['rl_analysis'] = rl_analysis
         
         # Calculate position size if we have entry and stop loss
         if combined_signal['entry_price'] and combined_signal['stop_loss'] and self.connected:
@@ -1773,6 +1958,172 @@ class MT5TradingBot:
             return None
         
         return combined_signal
+    
+    def get_ml_ensemble_summary(self) -> Optional[Dict[str, Any]]:
+        """
+        Get ML ensemble summary and performance metrics
+        
+        Returns:
+            dict: ML ensemble summary
+        """
+        if not self.use_ensemble or not self.ml_ensemble:
+            return None
+        
+        try:
+            return self.ml_ensemble.get_model_summary()
+        except Exception as e:
+            self.logger.error(f"Failed to get ML ensemble summary: {e}")
+            return None
+    
+    def run_market_structure_analysis(self) -> Optional[Dict[str, Any]]:
+        """
+        Run market structure analysis across multiple timeframes
+        
+        Returns:
+            dict: Market structure analysis results
+        """
+        if not self.use_market_structure or not self.market_structure_strategy:
+            return None
+        
+        try:
+            # Get data for different timeframes
+            data_d1 = self.get_market_data(timeframe='1d', count=100)
+            data_h4 = self.get_market_data(timeframe='4h', count=100)
+            data_h1 = self.get_market_data(timeframe='1h', count=100)
+            
+            if data_d1 is None or data_h4 is None or data_h1 is None:
+                self.logger.warning("Could not get market data for all timeframes")
+                return None
+            
+            # Run analysis
+            analysis = self.market_structure_strategy.analyze_symbol(
+                self.symbol, data_d1, data_h4, data_h1
+            )
+            
+            return analysis
+            
+        except Exception as e:
+            self.logger.error(f"Failed to run market structure analysis: {e}")
+            return None
+    
+    def get_market_structure_summary(self) -> Optional[Dict[str, Any]]:
+        """
+        Get market structure strategy summary
+        
+        Returns:
+            dict: Market structure strategy summary
+        """
+        if not self.use_market_structure or not self.market_structure_strategy:
+            return None
+        
+        try:
+            return self.market_structure_strategy.get_strategy_summary()
+        except Exception as e:
+            self.logger.error(f"Failed to get market structure summary: {e}")
+            return None
+    
+    def update_ml_ensemble_performance(self, prediction: Dict[str, Any], actual_outcome: int):
+        """
+        Update ML ensemble performance based on actual outcome
+        
+        Args:
+            prediction: ML prediction results
+            actual_outcome: Actual market outcome (1 for positive, 0 for negative)
+        """
+        if not self.use_ensemble or not self.ml_ensemble:
+            return
+        
+        try:
+            if 'ensemble_details' in prediction:
+                self.ml_ensemble.update_model_performance(prediction, actual_outcome)
+        except Exception as e:
+            self.logger.error(f"Failed to update ML ensemble performance: {e}")
+    
+    def run_rl_analysis(self) -> Optional[Dict[str, Any]]:
+        """
+        Run reinforcement learning analysis
+        
+        Returns:
+            dict: RL analysis results
+        """
+        if not self.use_rl or not self.rl_trader:
+            return None
+        
+        try:
+            # Get current market data
+            if not self.analysis_bot or self.analysis_bot.data is None:
+                self.logger.warning("No market data available for RL analysis")
+                return None
+            
+            # Prepare analysis data
+            analysis_data = {
+                'trend_analysis': self.trend_analysis if hasattr(self, 'trend_analysis') else {},
+                'market_structure': {},
+                'zones': [],
+                'patterns': []
+            }
+            
+            # Add market structure data if available
+            if self.use_market_structure and self.market_structure_strategy:
+                try:
+                    market_structure = self.market_structure_strategy.analyze_symbol(self.symbol)
+                    if market_structure:
+                        analysis_data['market_structure'] = {
+                            'higher_highs': market_structure.higher_highs,
+                            'higher_lows': market_structure.higher_lows,
+                            'lower_highs': market_structure.lower_highs,
+                            'lower_lows': market_structure.lower_lows
+                        }
+                        analysis_data['zones'] = market_structure.zones
+                        analysis_data['patterns'] = market_structure.patterns
+                except Exception as e:
+                    self.logger.warning(f"Failed to get market structure data for RL: {e}")
+            
+            # Get RL trading signal
+            rl_signal = self.rl_trader.get_trading_signal(self.analysis_bot.data, analysis_data)
+            
+            # Update RL trader with current trade status
+            if hasattr(self, 'current_position') and self.current_position:
+                # Check if current position should be closed based on RL
+                current_price = self.analysis_bot.data['Close'].iloc[-1]
+                
+                if self.current_position['type'] == 'BUY':
+                    if current_price >= self.current_position.get('take_profit', float('inf')):
+                        # Position hit take profit
+                        from reinforcement_learning_trader import TradeOutcome
+                        self.rl_trader.close_trade(current_price, TradeOutcome.WIN)
+                    elif current_price <= self.current_position.get('stop_loss', 0):
+                        # Position hit stop loss
+                        self.rl_trader.close_trade(current_price, TradeOutcome.LOSS)
+                else:  # SELL
+                    if current_price <= self.current_position.get('take_profit', 0):
+                        # Position hit take profit
+                        self.rl_trader.close_trade(current_price, TradeOutcome.WIN)
+                    elif current_price >= self.current_position.get('stop_loss', float('inf')):
+                        # Position hit stop loss
+                        self.rl_trader.close_trade(current_price, TradeOutcome.LOSS)
+            
+            return rl_signal
+            
+        except Exception as e:
+            self.logger.error(f"Failed to run RL analysis: {e}")
+            return None
+    
+    def get_rl_summary(self) -> Optional[Dict[str, Any]]:
+        """
+        Get reinforcement learning summary and performance metrics
+        
+        Returns:
+            dict: RL summary
+        """
+        if not self.use_rl or not self.rl_trader:
+            return None
+        
+        try:
+            return self.rl_trader.get_performance_metrics()
+        except Exception as e:
+            self.logger.error(f"Failed to get RL summary: {e}")
+            return None
 
 def main():
     """Main function for MT5 trading bot"""
