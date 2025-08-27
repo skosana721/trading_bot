@@ -44,3 +44,6 @@ beautifulsoup4==4.12.2
 
 # Note: MetaTrader5 is excluded as it's not available on deployment platforms
 # The trading bot will run in simulation mode when deployed
+
+# Additional modules for enhanced functionality
+# These are optional and will use dummy classes if not available

@@ -11,6 +11,9 @@ This Flask application provides a REST API for the trading bot with:
 - Enhanced logging and error handling
 """
 
+# Configure TensorFlow warnings before any other imports
+import tensorflow_config
+
 import logging
 import sys
 from flask import Flask, request, jsonify, render_template, session as flask_session

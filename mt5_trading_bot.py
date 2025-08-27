@@ -43,18 +43,34 @@ try:
     from market_structure_strategy import MarketStructureStrategy
     MARKET_STRUCTURE_AVAILABLE = True
 except ImportError:
-    import logging as _logging
-    _logging.getLogger('mt5_trading_bot').warning("Market Structure Strategy module not available")
     MARKET_STRUCTURE_AVAILABLE = False
+    # Create a dummy MarketStructureStrategy class for compatibility
+    class MarketStructureStrategy:
+        def __init__(self, config):
+            self.config = config
+        def analyze(self, *args, **kwargs):
+            return {'signal': 'NEUTRAL', 'confidence': 0.0}
+        def should_trade(self, *args, **kwargs):
+            return False
 
 # Reinforcement Learning Trader
 try:
     from reinforcement_learning_trader import ReinforcementLearningTrader
     RL_AVAILABLE = True
 except ImportError:
-    import logging as _logging
-    _logging.getLogger('mt5_trading_bot').warning("Reinforcement Learning Trader module not available")
     RL_AVAILABLE = False
+    # Create a dummy ReinforcementLearningTrader class for compatibility
+    class ReinforcementLearningTrader:
+        def __init__(self, **kwargs):
+            pass
+        def get_action(self, *args, **kwargs):
+            return 'HOLD'
+        def update(self, *args, **kwargs):
+            pass
+        def save_model(self, *args, **kwargs):
+            pass
+        def load_model(self, *args, **kwargs):
+            pass
 
 # Technical Analysis
 try:
@@ -70,9 +86,15 @@ try:
     from smart_money_concept import SmartMoneyConcept
     SMC_AVAILABLE = True
 except ImportError:
-    import logging as _logging
-    _logging.getLogger('mt5_trading_bot').warning("Smart Money Concept module not available")
     SMC_AVAILABLE = False
+    # Create a dummy SmartMoneyConcept class for compatibility
+    class SmartMoneyConcept:
+        def __init__(self, *args, **kwargs):
+            pass
+        def analyze(self, *args, **kwargs):
+            return {'signal': 'NEUTRAL', 'confidence': 0.0}
+        def get_signals(self, *args, **kwargs):
+            return {}
 
 from dotenv import load_dotenv
 from typing import Any, Dict, List, Optional, Tuple
