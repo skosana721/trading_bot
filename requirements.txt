@@ -27,7 +27,7 @@ matplotlib
 plotly
 
 # MetaTrader 5 Integration (not available on deployment platforms)
-# MetaTrader5
+MetaTrader5
 
 # Environment and Configuration
 python-dotenv
