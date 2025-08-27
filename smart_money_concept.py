@@ -49,7 +49,7 @@ class SmartMoneyConcept:
     
     def analyze_smc_components(self):
         """Analyze all SMC components"""
-        print("🔍 Analyzing Smart Money Concept Components...")
+        self.logger.info("Analyzing Smart Money Concept Components...")
         
         # 1. Market Structure Analysis
         self.analyze_market_structure()
@@ -69,11 +69,11 @@ class SmartMoneyConcept:
         # 6. Institutional Order Blocks
         self.identify_institutional_order_blocks()
         
-        print("✅ SMC Analysis Complete")
+        self.logger.info("SMC Analysis Complete")
     
     def analyze_market_structure(self):
         """Analyze market structure (Higher Highs, Higher Lows, Break of Structure)"""
-        print("📊 Analyzing Market Structure...")
+        self.logger.info("Analyzing Market Structure...")
         
         # Find swing highs and lows
         swing_highs = self.find_swing_points('high', window=5)
@@ -284,7 +284,7 @@ class SmartMoneyConcept:
 
     def identify_order_blocks(self):
         """Identify Order Blocks (OB) - institutional order zones"""
-        print("📦 Identifying Order Blocks...")
+        self.logger.info("Identifying Order Blocks...")
         
         order_blocks = []
         
@@ -391,7 +391,7 @@ class SmartMoneyConcept:
     
     def identify_fair_value_gaps(self):
         """Identify Fair Value Gaps (FVG) - price inefficiencies"""
-        print("🕳️ Identifying Fair Value Gaps...")
+        self.logger.info("Identifying Fair Value Gaps...")
         
         fair_value_gaps = []
         
@@ -430,7 +430,7 @@ class SmartMoneyConcept:
     
     def identify_liquidity_zones(self):
         """Identify Liquidity Zones - areas of stop losses"""
-        print("💧 Identifying Liquidity Zones...")
+        self.logger.info("Identifying Liquidity Zones...")
         
         liquidity_zones = []
         
@@ -530,7 +530,7 @@ class SmartMoneyConcept:
     
     def identify_premium_discount_zones(self):
         """Identify Premium and Discount Zones"""
-        print("💰 Identifying Premium/Discount Zones...")
+        self.logger.info("Identifying Premium/Discount Zones...")
         
         premium_zones = []
         discount_zones = []
@@ -573,7 +573,7 @@ class SmartMoneyConcept:
     
     def identify_institutional_order_blocks(self):
         """Identify Institutional Order Blocks (IOB) - large volume zones"""
-        print("🏢 Identifying Institutional Order Blocks...")
+        self.logger.info("Identifying Institutional Order Blocks...")
         
         institutional_obs = []
         

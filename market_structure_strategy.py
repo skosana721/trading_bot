@@ -577,10 +577,20 @@ class MarketStructureStrategy:
     
     def _send_alert(self, log_entry: Dict[str, Any]):
         """Send trade alert (placeholder for alert system)"""
-        # TODO: Implement alert system
-        # - Terminal alert
-        # - Email notification
-        # - Push notification
+        # Alert system implementation placeholder
+        # - Terminal alert: Log to console/file
+        # - Email notification: Send via SMTP
+        # - Push notification: Send via webhook/API
+        
+        # Log alert to console for now
+        alert_message = f"TRADE ALERT: {log_entry['action']} {log_entry['symbol']} at {log_entry['entry_price']}"
+        logger.info(alert_message)
+        
+        # Future implementations:
+        # 1. Email alerts via SMTP
+        # 2. Push notifications via webhook
+        # 3. Telegram/Discord integration
+        # 4. SMS alerts via Twilio
         pass
     
     def get_strategy_summary(self) -> Dict[str, Any]:

@@ -48,7 +48,7 @@ class TradingBot:
             else:
                 self.logger.warning(f"No data fetched for {self.symbol}")
                 return False
-                
+        
         except Exception as e:
             self.logger.error(f"Error fetching data: {e}")
             return False
@@ -80,7 +80,7 @@ class TradingBot:
                 'uptrend_confirmed': trend == "uptrend",
                 'downtrend_confirmed': trend == "downtrend"
             }
-            
+                
         except Exception as e:
             self.logger.error(f"Error analyzing market trend: {e}")
             return None

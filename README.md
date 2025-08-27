@@ -57,7 +57,7 @@ A comprehensive trading bot system that combines manual analysis, automated trad
 ## 🚀 Quick Start
 
 ### Unified Startup Script (Recommended)
-```bash
+   ```bash
 # Test MT5 connection
 python start_unified_bot.py test
 
@@ -72,13 +72,13 @@ python start_unified_bot.py web
 ```
 
 ### Individual Components
-```bash
+   ```bash
 # Enhanced trading bot (manual + automated)
 python mt5_trading_bot.py
 
 # Web interface
-python app.py
-```
+   python app.py
+   ```
 
 ## 📊 Available Strategies
 

@@ -171,7 +171,7 @@ def initialize_enhanced_bot(symbol, timeframe, market_type='forex', enable_autom
         enhanced_bot_instance = MT5TradingBot(
             symbol=symbol,
             timeframe=timeframe,
-            risk_per_trade=bot_config['risk_per_trade'],
+            risk_per_trade=(bot_config['risk_per_trade'] if bot_config['risk_per_trade'] is not None else 0.02),
             use_mt5_data=True,
             auto_trade=enable_automation
         )

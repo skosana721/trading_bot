@@ -32,7 +32,7 @@ import os
 import joblib
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional, Any
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -55,25 +55,25 @@ except ImportError as e:
 # Deep Learning (optional)
 try:
     import tensorflow as tf
-    from tensorflow.keras.models import Sequential
-    from tensorflow.keras.layers import LSTM, Dense, Dropout, BatchNormalization
-    from tensorflow.keras.optimizers import Adam
-    from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
+    from keras.models import Sequential
+    from keras.layers import LSTM, Dense, Dropout, BatchNormalization
+    from keras.optimizers import Adam
+    from keras.callbacks import EarlyStopping, ReduceLROnPlateau
     DEEP_LEARNING_AVAILABLE = True
 except ImportError:
     DEEP_LEARNING_AVAILABLE = False
-    print("Deep learning libraries not available. LSTM models will be disabled.")
+    print("Warning: Deep learning libraries not available. LSTM models will be disabled.")
 
 @dataclass
 class ModelPerformance:
     """Data class to track model performance"""
-    model_name: str
-    accuracy: float
-    precision: float
-    recall: float
-    f1_score: float
-    cv_score: float
-    last_updated: datetime
+    model_name: str = ""
+    accuracy: float = 0.0
+    precision: float = 0.0
+    recall: float = 0.0
+    f1_score: float = 0.0
+    cv_score: float = 0.0
+    last_updated: datetime = field(default_factory=datetime.now)
     prediction_count: int = 0
     correct_predictions: int = 0
 
@@ -182,45 +182,83 @@ class MLEnsemble:
             random_state=42
         )
         
-        # Deep Learning Models
-        if self.use_deep_learning:
-            self.models['lstm'] = self._create_lstm_model()
+        # Deep Learning Models - will be created dynamically during training
+        if self.use_deep_learning and DEEP_LEARNING_AVAILABLE:
+            self.logger.info("Deep learning enabled - LSTM model will be created during training")
+        else:
+            self.logger.info("Deep learning disabled or not available")
         
         # Initialize scalers and feature selectors
         for model_name in self.models.keys():
             self.scalers[model_name] = RobustScaler()
-            self.feature_selectors[model_name] = SelectKBest(score_func=f_classif, k=20)
-            self.model_performances[model_name] = ModelPerformance(
-                model_name=model_name,
-                accuracy=0.0,
-                precision=0.0,
-                recall=0.0,
-                f1_score=0.0,
-                cv_score=0.0,
-                last_updated=datetime.now()
-            )
+            self.feature_selectors[model_name] = SelectKBest(k=20)
+            self.model_performances[model_name] = ModelPerformance(model_name=model_name)
     
-    def _create_lstm_model(self):
+    def _are_models_trained(self) -> bool:
+        """Check if models are properly trained"""
+        try:
+            # Check if we have any models
+            if not self.models:
+                return False
+            
+            # Check if we have feature columns
+            if not self.feature_columns:
+                return False
+            
+            # Check if at least one traditional model has been trained
+            trained_models = 0
+            for model_name, model in self.models.items():
+                if model_name == 'lstm':
+                    # For LSTM, check if it exists and has input shape
+                    if model is not None and hasattr(model, 'input_shape'):
+                        trained_models += 1
+                else:
+                    # For traditional models, check if scaler is fitted
+                    if (model is not None and 
+                        model_name in self.scalers and 
+                        hasattr(self.scalers[model_name], 'scale_')):
+                        trained_models += 1
+            
+            return trained_models > 0
+            
+        except Exception as e:
+            self.logger.error(f"Error checking if models are trained: {e}")
+            return False
+    
+    def _create_lstm_model(self, n_features: int = None):
         """Create LSTM model for time series prediction"""
         if not DEEP_LEARNING_AVAILABLE:
             return None
         
-        model = Sequential([
-            LSTM(100, return_sequences=True, input_shape=(None, 1)),
-            Dropout(0.2),
-            LSTM(50, return_sequences=False),
-            Dropout(0.2),
-            Dense(25, activation='relu'),
-            Dense(1, activation='sigmoid')
-        ])
-        
-        model.compile(
-            optimizer=Adam(learning_rate=0.001),
-            loss='binary_crossentropy',
-            metrics=['accuracy']
-        )
-        
-        return model
+        try:
+            # Use dynamic input shape based on actual feature count
+            if n_features is None:
+                n_features = 60  # Default fallback
+            
+            # Ensure n_features is reasonable
+            if n_features <= 0:
+                self.logger.warning(f"Invalid feature count: {n_features}, using default 60")
+                n_features = 60
+            
+            model = Sequential([
+                LSTM(100, return_sequences=True, input_shape=(n_features, 1)),
+                Dropout(0.2),
+                LSTM(50, return_sequences=False),
+                Dropout(0.2),
+                Dense(25, activation='relu'),
+                Dense(1, activation='sigmoid')
+            ])
+            
+            model.compile(
+                optimizer=Adam(learning_rate=0.001),
+                loss='binary_crossentropy',
+                metrics=['accuracy']
+            )
+            
+            return model
+        except Exception as e:
+            self.logger.warning(f"Failed to initialize LSTM model: {e}, skipping deep learning")
+            return None
     
     def create_advanced_features(self, data: pd.DataFrame) -> pd.DataFrame:
         """
@@ -233,6 +271,14 @@ class MLEnsemble:
             DataFrame with advanced features
         """
         df = data.copy()
+        
+        # Ensure index is datetime for time-based features
+        if not isinstance(df.index, pd.DatetimeIndex):
+            try:
+                df.index = pd.to_datetime(df.index)
+            except:
+                # If conversion fails, create a simple numeric index
+                df.index = pd.RangeIndex(len(df))
         
         # Price-based features
         df['price_change'] = df['Close'].pct_change()
@@ -301,14 +347,38 @@ class MLEnsemble:
         df['momentum_10'] = df['Close'] / df['Close'].shift(10) - 1
         df['momentum_20'] = df['Close'] / df['Close'].shift(20) - 1
         
-        # Time-based features
-        df['hour'] = pd.to_datetime(df.index).hour
-        df['day_of_week'] = pd.to_datetime(df.index).dayofweek
-        df['month'] = pd.to_datetime(df.index).month
+        # Time-based features (only if index is datetime)
+        if isinstance(df.index, pd.DatetimeIndex):
+            df['hour'] = df.index.hour.astype(np.float64)
+            df['day_of_week'] = df.index.dayofweek.astype(np.float64)
+            df['month'] = df.index.month.astype(np.float64)
+        else:
+            # Use simple numeric features instead
+            df['hour'] = np.float64(12.0)  # Default to noon
+            df['day_of_week'] = np.float64(0.0)  # Default to Monday
+            df['month'] = np.float64(1.0)  # Default to January
         
         # Remove infinite values and fill NaN
         df = df.replace([np.inf, -np.inf], np.nan)
         df = df.fillna(method='ffill').fillna(method='bfill')
+        
+        # Ensure all features are numeric
+        for col in df.columns:
+            if df[col].dtype == 'object' or df[col].dtype.name.startswith('datetime'):
+                try:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+                except:
+                    # If conversion fails, drop the column
+                    df = df.drop(columns=[col])
+        
+        # Convert all remaining columns to float64 to ensure consistency
+        for col in df.columns:
+            if col not in ['Open', 'High', 'Low', 'Close', 'Volume']:  # Keep original price columns as is
+                try:
+                    df[col] = df[col].astype(np.float64)
+                except:
+                    # If conversion fails, drop the column
+                    df = df.drop(columns=[col])
         
         return df
     
@@ -357,10 +427,32 @@ class MLEnsemble:
         exclude_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
         feature_columns = [col for col in df_with_features.columns if col not in exclude_columns]
         
+        # Ensure all feature columns are numeric
+        numeric_features = []
+        for col in feature_columns:
+            if col in df_with_features.columns:
+                try:
+                    # Skip datetime columns
+                    if df_with_features[col].dtype == 'datetime64[ns]':
+                        continue
+                    
+                    # Convert to numeric and then to float64
+                    df_with_features[col] = pd.to_numeric(df_with_features[col], errors='coerce').astype(np.float64)
+                    numeric_features.append(col)
+                except Exception as e:
+                    self.logger.debug(f"Skipping non-numeric column {col}: {e}")
+                    continue
+        
+        feature_columns = numeric_features
+        
         # Remove rows with NaN values
         valid_indices = ~(df_with_features[feature_columns].isnull().any(axis=1) | target.isnull())
         features = df_with_features[feature_columns].loc[valid_indices]
         target = target.loc[valid_indices]
+        
+        # Final validation - ensure all data is numeric
+        features = features.select_dtypes(include=[np.number])
+        feature_columns = list(features.columns)
         
         self.feature_columns = feature_columns
         
@@ -425,13 +517,32 @@ class MLEnsemble:
         try:
             self.logger.info(f"Training {model_name}...")
             
+            # Ensure we have enough features
+            n_features = len(X_train.columns)
+            if n_features < 5:
+                self.logger.warning(f"Not enough features for {model_name}: {n_features}")
+                return False
+            
+            # Adjust feature selector k if needed
+            k = min(20, n_features)
+            if self.feature_selectors[model_name] is None:
+                self.feature_selectors[model_name] = SelectKBest(score_func=f_classif, k=k)
+            else:
+                # Update k if needed
+                if hasattr(self.feature_selectors[model_name], 'k') and self.feature_selectors[model_name].k > n_features:
+                    self.feature_selectors[model_name] = SelectKBest(score_func=f_classif, k=k)
+            
             # Feature selection
             X_train_selected = self.feature_selectors[model_name].fit_transform(X_train, y_train)
             X_test_selected = self.feature_selectors[model_name].transform(X_test)
             
-            # Scaling
+            # Ensure scaler is fitted with the selected features
+            self.scalers[model_name] = RobustScaler()
             X_train_scaled = self.scalers[model_name].fit_transform(X_train_selected)
             X_test_scaled = self.scalers[model_name].transform(X_test_selected)
+            
+            # Log the feature counts for debugging
+            self.logger.info(f"{model_name} - Original features: {len(X_train.columns)}, Selected features: {X_train_selected.shape[1]}, Scaled features: {X_train_scaled.shape[1]}")
             
             # Train model
             model.fit(X_train_scaled, y_train)
@@ -466,20 +577,56 @@ class MLEnsemble:
     def _train_lstm_model(self, X_train: pd.DataFrame, y_train: pd.Series, 
                          X_test: pd.DataFrame, y_test: pd.Series):
         """Train LSTM model"""
-        if not DEEP_LEARNING_AVAILABLE or 'lstm' not in self.models:
+        if not DEEP_LEARNING_AVAILABLE or not self.use_deep_learning:
             return
         
         try:
             self.logger.info("Training LSTM model...")
             
+            # Ensure data is numeric and clean
+            X_train_clean = X_train.select_dtypes(include=[np.number])
+            X_test_clean = X_test.select_dtypes(include=[np.number])
+            
+            # Remove any remaining NaN values
+            X_train_clean = X_train_clean.fillna(0)
+            X_test_clean = X_test_clean.fillna(0)
+            
             # Prepare LSTM data (3D format: samples, timesteps, features)
             sequence_length = 20
-            X_lstm_train = self._prepare_lstm_data(X_train, sequence_length)
-            X_lstm_test = self._prepare_lstm_data(X_test, sequence_length)
             
-            # Adjust target data
-            y_lstm_train = y_train.iloc[sequence_length-1:]
-            y_lstm_test = y_test.iloc[sequence_length-1:]
+            # Ensure we have enough data
+            if len(X_train_clean) < sequence_length + 1 or len(X_test_clean) < sequence_length + 1:
+                self.logger.warning("Insufficient data for LSTM training")
+                return
+            
+            X_lstm_train = self._prepare_lstm_data(X_train_clean, sequence_length)
+            X_lstm_test = self._prepare_lstm_data(X_test_clean, sequence_length)
+            
+            # Ensure we have matching target data
+            if len(y_train) < len(X_lstm_train) + sequence_length - 1:
+                self.logger.warning("Target data length mismatch for LSTM")
+                return
+                
+            if len(y_test) < len(X_lstm_test) + sequence_length - 1:
+                self.logger.warning("Target data length mismatch for LSTM")
+                return
+            
+            # Adjust target data to match LSTM input
+            y_lstm_train = y_train.iloc[sequence_length-1:sequence_length-1+len(X_lstm_train)]
+            y_lstm_test = y_test.iloc[sequence_length-1:sequence_length-1+len(X_lstm_test)]
+            
+            # Final validation of data shapes
+            if len(X_lstm_train) != len(y_lstm_train) or len(X_lstm_test) != len(y_lstm_test):
+                self.logger.error(f"Data shape mismatch: X_train={X_lstm_train.shape}, y_train={y_lstm_train.shape}, X_test={X_lstm_test.shape}, y_test={y_lstm_test.shape}")
+                return
+            
+            # Create LSTM model with correct input shape
+            n_features = X_lstm_train.shape[2]  # Get actual number of features
+            self.models['lstm'] = self._create_lstm_model(n_features)
+            
+            if self.models['lstm'] is None:
+                self.logger.warning("Failed to create LSTM model, skipping LSTM training")
+                return
             
             # Train LSTM
             callbacks = [
@@ -569,6 +716,11 @@ class MLEnsemble:
         if not self.models:
             return None
         
+        # Check if models are trained
+        if not self._are_models_trained():
+            self.logger.warning("Models are not trained yet, cannot make predictions")
+            return None
+        
         try:
             # Prepare features
             df_with_features = self.create_advanced_features(data)
@@ -579,8 +731,19 @@ class MLEnsemble:
             # Get latest data point
             latest_features = df_with_features[self.feature_columns].tail(1)
             
-            # Remove NaN values
+            # Ensure all features are numeric and remove NaN values
+            for col in latest_features.columns:
+                try:
+                    # Handle None values explicitly
+                    if latest_features[col].isnull().any():
+                        latest_features[col] = latest_features[col].fillna(0.0)
+                    latest_features[col] = pd.to_numeric(latest_features[col], errors='coerce').astype(np.float64)
+                except Exception as e:
+                    self.logger.warning(f"Failed to convert feature {col} to numeric: {e}")
+                    return None
+            
             if latest_features.isnull().any().any():
+                self.logger.warning("NaN values found in features after conversion")
                 return None
             
             predictions = {}
@@ -589,16 +752,49 @@ class MLEnsemble:
             # Get predictions from each model
             for model_name, model in self.models.items():
                 if model_name == 'lstm':
-                    # Handle LSTM prediction
-                    lstm_pred = self._get_lstm_prediction(df_with_features)
-                    if lstm_pred:
-                        predictions[model_name] = lstm_pred['prediction']
-                        confidences[model_name] = lstm_pred['confidence']
+                    # Handle LSTM prediction - only if deep learning is available
+                    if DEEP_LEARNING_AVAILABLE and model is not None:
+                        lstm_pred = self._get_lstm_prediction(df_with_features)
+                        if lstm_pred:
+                            predictions[model_name] = lstm_pred['prediction']
+                            confidences[model_name] = lstm_pred['confidence']
+                        else:
+                            self.logger.debug("LSTM prediction returned None")
+                    else:
+                        self.logger.debug("LSTM not available, skipping")
                 else:
                     # Traditional model prediction
                     try:
+                        # Check if feature selector exists and is properly fitted
+                        if self.feature_selectors[model_name] is None:
+                            self.logger.warning(f"Feature selector not initialized for {model_name}, skipping")
+                            continue
+                        
+                        # Ensure feature selector has been fitted
+                        if not hasattr(self.feature_selectors[model_name], 'get_support'):
+                            self.logger.warning(f"Feature selector for {model_name} not properly fitted, skipping")
+                            continue
+                        
                         # Feature selection and scaling
                         features_selected = self.feature_selectors[model_name].transform(latest_features)
+                        
+                        # Ensure scaler is properly fitted and compatible with feature selector
+                        if not hasattr(self.scalers[model_name], 'scale_'):
+                            self.logger.warning(f"Scaler for {model_name} not properly fitted, skipping")
+                            continue
+                        
+                        # Check if scaler expects the same number of features as selected
+                        expected_features = self.scalers[model_name].scale_.shape[0]
+                        actual_features = features_selected.shape[1]
+                        
+                        if expected_features != actual_features:
+                            self.logger.warning(f"Feature count mismatch for {model_name}: scaler expects {expected_features}, got {actual_features}")
+                            # Recreate scaler with correct number of features
+                            self.scalers[model_name] = RobustScaler()
+                            # We need to refit the scaler, but we don't have training data here
+                            # So we'll skip this model for now
+                            continue
+                        
                         features_scaled = self.scalers[model_name].transform(features_selected)
                         
                         # Get prediction
@@ -652,7 +848,7 @@ class MLEnsemble:
     
     def _get_lstm_prediction(self, data: pd.DataFrame) -> Optional[Dict[str, Any]]:
         """Get LSTM prediction"""
-        if not DEEP_LEARNING_AVAILABLE or 'lstm' not in self.models:
+        if not DEEP_LEARNING_AVAILABLE or not self.use_deep_learning or 'lstm' not in self.models:
             return None
         
         try:
@@ -660,12 +856,58 @@ class MLEnsemble:
             if len(data) < sequence_length:
                 return None
             
+            # Ensure we have the required feature columns
+            if not hasattr(self, 'feature_columns') or not self.feature_columns:
+                self.logger.warning("No feature columns available for LSTM prediction")
+                return None
+            
+            # Get only numeric columns and ensure they exist
+            available_features = [col for col in self.feature_columns if col in data.columns]
+            if not available_features:
+                self.logger.warning("No valid feature columns found in data")
+                return None
+            
+            # Select only numeric data and ensure it's properly formatted
+            feature_data = data[available_features].copy()
+            
+            # Convert all columns to numeric, dropping any that can't be converted
+            for col in feature_data.columns:
+                try:
+                    feature_data[col] = pd.to_numeric(feature_data[col], errors='coerce')
+                except Exception:
+                    feature_data = feature_data.drop(columns=[col])
+            
+            # Remove any NaN values
+            feature_data = feature_data.fillna(0)
+            
+            if len(feature_data) < sequence_length:
+                self.logger.warning("Insufficient data for LSTM prediction")
+                return None
+            
+            if feature_data.empty:
+                self.logger.warning("No valid numeric data for LSTM prediction")
+                return None
+            
             # Prepare LSTM data
-            latest_sequence = data[self.feature_columns].tail(sequence_length).values
-            lstm_input = latest_sequence.reshape(1, sequence_length, len(self.feature_columns))
+            latest_sequence = feature_data.tail(sequence_length).values
+            
+            # Ensure the sequence has the correct shape
+            if latest_sequence.shape[0] != sequence_length:
+                self.logger.warning(f"Sequence length mismatch: expected {sequence_length}, got {latest_sequence.shape[0]}")
+                return None
+            
+            # Validate that the number of features matches the model's expected input
+            expected_features = self.models['lstm'].input_shape[1]  # Get expected features from model
+            actual_features = latest_sequence.shape[1]
+            
+            if actual_features != expected_features:
+                self.logger.warning(f"Feature count mismatch: model expects {expected_features}, data has {actual_features}")
+                return None
+            
+            lstm_input = latest_sequence.reshape(1, sequence_length, actual_features)
             
             # Get prediction
-            prediction_proba = self.models['lstm'].predict(lstm_input)[0][0]
+            prediction_proba = self.models['lstm'].predict(lstm_input, verbose=0)[0][0]
             prediction = 1 if prediction_proba > 0.5 else 0
             
             return {

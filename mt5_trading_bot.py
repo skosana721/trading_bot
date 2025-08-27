@@ -98,7 +98,12 @@ class MT5TradingBot:
         """
         self.symbol = symbol
         self.timeframe = timeframe
-        self.risk_per_trade = risk_per_trade
+        # Ensure risk_per_trade has a valid value
+        if risk_per_trade is None or risk_per_trade <= 0:
+            self.risk_per_trade = 0.02  # Default to 2%
+            self.logger.warning(f"Invalid risk_per_trade value ({risk_per_trade}), using default 0.02 (2%)")
+        else:
+            self.risk_per_trade = risk_per_trade
         self.use_mt5_data = use_mt5_data
         self.auto_trade = auto_trade
         self.use_ml = use_ml and ML_AVAILABLE
@@ -725,7 +730,7 @@ class MT5TradingBot:
             trend_direction = analysis.get('trend_direction', 'SIDEWAYS')
             
             if not analysis or (not uptrend_confirmed and not downtrend_confirmed):
-                print(f"❌ No strong trend confirmed ({trend_direction}) - no trading signals")
+                self.logger.warning(f"No strong trend confirmed ({trend_direction}) - no trading signals")
                 return None
         
             # Check for entry conditions (can be relaxed for now since we're using basic analysis)
@@ -733,7 +738,7 @@ class MT5TradingBot:
             #     print("ℹ️  No entry conditions met - waiting for breakout or continuation pattern")
             #     return None
         except Exception as e:
-            print(f"❌ Error checking analysis structure: {e}")
+            self.logger.error(f"Error checking analysis structure: {e}")
             return None
         
         self.logger.info("GENERATING TRADING SIGNALS")
@@ -884,7 +889,7 @@ class MT5TradingBot:
             
             current_stop_distance = abs(entry_price - stop_loss_price)
             if current_stop_distance < min_stop_distance:
-                print(f"⚠️  Adjusting stop loss to meet broker minimum ({min_stop_level_points} points)")
+                self.logger.warning(f"Adjusting stop loss to meet broker minimum ({min_stop_level_points} points)")
                 if entry_price > stop_loss_price:  # Long position
                     stop_loss_price = entry_price - min_stop_distance
                 else:  # Short position
@@ -902,19 +907,19 @@ class MT5TradingBot:
                 account_info = self.mt5_connector.get_account_summary()
                 if account_info:
                     current_balance = account_info.get('balance', 0)
-                    print(f"💰 Current Account Balance: ${current_balance:,.2f}")
+                    self.logger.info(f"Current Account Balance: ${current_balance:,.2f}")
                 else:
-                    print(f"❌ Could not get account balance from MT5")
+                    self.logger.error("Could not get account balance from MT5")
                     return None
             except Exception as e:
-                print(f"❌ Error getting account balance: {e}")
+                self.logger.error(f"Error getting account balance: {e}")
                 return None
         else:
-            print(f"❌ Not connected to MT5 - cannot get account balance")
+            self.logger.error("Not connected to MT5 - cannot get account balance")
             return None
         
         if current_balance is None or current_balance <= 0:
-            print(f"❌ Invalid account balance: ${current_balance}")
+            self.logger.error(f"Invalid account balance: ${current_balance}")
             return None
         
         # Robust position sizing constrained by risk and free margin
@@ -942,6 +947,12 @@ class MT5TradingBot:
         # Calculate actual dollar amounts
         # Use dynamic pip value per lot for accurate dollar amounts
         pip_value_per_lot = self.mt5_connector.get_pip_value_per_lot(self.symbol) if (self.connected and self.mt5_connector) else 10.0
+        
+        # Ensure all values are valid before multiplication
+        if position_size is None or stop_loss_pips is None or target_pips is None:
+            print("❌ Error: Invalid values for risk calculation")
+            return None
+        
         risk_amount = position_size * stop_loss_pips * pip_value_per_lot
         reward_amount = position_size * target_pips * pip_value_per_lot
         
@@ -1031,6 +1042,17 @@ class MT5TradingBot:
             return None
         
         try:
+            # Validate required signal fields
+            required_fields = ['signal_type', 'entry_price', 'stop_loss', 'target', 'position_size', 'risk_amount', 'potential_profit']
+            missing_fields = []
+            for field in required_fields:
+                if field not in signals or signals[field] is None:
+                    missing_fields.append(field)
+            
+            if missing_fields:
+                print(f"❌ Missing required signal fields: {missing_fields}")
+                return None
+            
             # Get current account balance and margin information
             print(f"\n💰 CHECKING ACCOUNT STATUS FOR TRADE EXECUTION")
             account_info = self.mt5_connector.get_account_summary()
@@ -1114,9 +1136,23 @@ class MT5TradingBot:
             adjusted_signals = signals.copy()
             if available_risk < signals['risk_amount']:
                 risk_ratio = available_risk / signals['risk_amount']
-                adjusted_signals['position_size'] = signals['position_size'] * risk_ratio
+                # Ensure position_size is not None before multiplication
+                current_position_size = signals.get('position_size')
+                if current_position_size is not None:
+                    adjusted_signals['position_size'] = current_position_size * risk_ratio
+                else:
+                    print("⚠️  Warning: position_size is None, cannot adjust")
+                    return None
+                
                 adjusted_signals['risk_amount'] = available_risk
-                adjusted_signals['potential_profit'] = signals['potential_profit'] * risk_ratio
+                
+                # Ensure potential_profit is not None before multiplication
+                current_profit = signals.get('potential_profit')
+                if current_profit is not None:
+                    adjusted_signals['potential_profit'] = current_profit * risk_ratio
+                else:
+                    adjusted_signals['potential_profit'] = 0.0
+                
                 print(f"📊 Adjusted position size due to risk allocation: {risk_ratio:.2f}")
             
             # Final volume validation before placing order
@@ -1128,7 +1164,12 @@ class MT5TradingBot:
                     volume_step = symbol_info.get('volume_step', 0.01)
                     
                     # Ensure final position size is valid
-                    final_size = float(adjusted_signals.get('position_size') or 0)
+                    position_size_value = adjusted_signals.get('position_size')
+                    if position_size_value is None:
+                        print("❌ Error: position_size is None in adjusted_signals")
+                        return None
+                    
+                    final_size = float(position_size_value)
                     if final_size < min_volume:
                         print(f"⚠️  Position size {final_size:.4f} is below minimum {min_volume}. Using minimum volume.")
                         # Scale risk/profit amounts proportionally if present
