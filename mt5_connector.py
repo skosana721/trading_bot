@@ -7,7 +7,6 @@ This module provides integration between the trading bot and MetaTrader 5
 for executing trades on XM trading account.
 """
 
-import MetaTrader5 as mt5
 import logging
 import time as _time
 import math
@@ -18,6 +17,14 @@ import time
 import os
 from dotenv import load_dotenv
 from utils.backoff import backoff
+
+# Try to import MetaTrader5
+try:
+    import MetaTrader5 as mt5
+    MT5_AVAILABLE = True
+except ImportError:
+    MT5_AVAILABLE = False
+    print("Warning: MetaTrader5 not available - MT5Connector will run in simulation mode")
 
 # Load environment variables
 load_dotenv()
@@ -66,6 +73,13 @@ class MT5Connector:
         Returns:
             bool: True if connection successful, False otherwise
         """
+        # Check if MT5 is available
+        if not MT5_AVAILABLE:
+            self.last_error = "MetaTrader5 not available - running in simulation mode"
+            self.logger.warning(self.last_error)
+            self.connected = True  # Simulate connection for compatibility
+            return True
+            
         try:
             # Validate and/or populate credentials before initializing MT5
             if not self.account_number or not self.password or not self.server:

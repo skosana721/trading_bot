@@ -34,7 +34,7 @@ try:
     from mt5_trading_bot import MT5TradingBot
     MT5_AVAILABLE = True
 except ImportError:
-    app_logger.warning("MetaTrader5 components not available - running in simulation mode")
+    print("Warning: MetaTrader5 components not available - running in simulation mode")
     MT5_AVAILABLE = False
 
 # Load environment variables

@@ -36,19 +36,17 @@ class DeploymentConfig:
             import MetaTrader5 as mt5
             return True
         except ImportError:
-            logger.warning("MetaTrader5 not available - running in simulation mode")
+            print("Warning: MetaTrader5 not available - running in simulation mode")
             return False
     
     @staticmethod
     def get_trading_mode():
         """Determine trading mode based on environment"""
-        if DeploymentConfig.is_deployment_environment():
-            if DeploymentConfig.get_mt5_availability():
-                return "live"
-            else:
-                return "simulation"
+        # Force live trading mode if MT5 is available
+        if DeploymentConfig.get_mt5_availability():
+            return "live"
         else:
-            return "live"  # Assume local environment can use MT5
+            return "simulation"
     
     @staticmethod
     def get_platform_limitations():

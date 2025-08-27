@@ -19,14 +19,15 @@ lightgbm==4.1.0
 # Deep Learning (optional)
 tensorflow==2.15.0
 
-# Technical Analysis (using alternative to TA-Lib)
-# TA-Lib is not available on most deployment platforms
-# ta-lib==0.4.28
-# Using 'ta' library instead which is more deployment-friendly
+# Technical Analysis
+TA-Lib==0.4.28
 
 # Visualization
 matplotlib==3.8.2
 plotly==5.17.0
+
+# MetaTrader 5 Integration (Windows only)
+MetaTrader5==5.0.45
 
 # Environment and Configuration
 python-dotenv==1.0.0
@@ -42,5 +43,5 @@ lxml==4.9.3
 html5lib==1.1
 beautifulsoup4==4.12.2
 
-# Note: MetaTrader5 is excluded as it's not available on deployment platforms
-# The trading bot will run in simulation mode when deployed
+# Note: This file is for Windows deployment with live trading enabled
+# Requires MetaTrader5 terminal to be installed on the server
