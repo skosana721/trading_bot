@@ -25,10 +25,17 @@ import traceback
 from dotenv import load_dotenv
 from functools import wraps
 
+# Import deployment configuration
+from deployment_config import DeploymentConfig, DEPLOYMENT_MODE, PLATFORM_LIMITATIONS
+
 # Import trading bot components
-from mt5_connector import MT5Connector
-from mt5_trading_bot import MT5TradingBot
-from mt5_trading_bot import MT5TradingBot  # Import the enhanced trading bot
+try:
+    from mt5_connector import MT5Connector
+    from mt5_trading_bot import MT5TradingBot
+    MT5_AVAILABLE = True
+except ImportError:
+    app_logger.warning("MetaTrader5 components not available - running in simulation mode")
+    MT5_AVAILABLE = False
 
 # Load environment variables
 load_dotenv()
@@ -741,6 +748,11 @@ def get_status():
         'positions': [],
         'account_info': None,
         'trading_bots': {},
+        'deployment_info': {
+            'mode': DEPLOYMENT_MODE,
+            'limitations': PLATFORM_LIMITATIONS,
+            'mt5_available': MT5_AVAILABLE
+        },
         'connection_details': {
             'has_bot_instance': bot_instance is not None,
             'has_mt5_connector': False,
