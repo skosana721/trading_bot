@@ -76,7 +76,23 @@ except ImportError:
 
 from dotenv import load_dotenv
 from typing import Any, Dict, List, Optional, Tuple
-from mt5_connector import MT5Connector
+
+# Try to import MT5Connector
+try:
+    from mt5_connector import MT5Connector
+    MT5_CONNECTOR_AVAILABLE = True
+except ImportError:
+    MT5_CONNECTOR_AVAILABLE = False
+    print("Warning: MT5Connector not available - trading bot will run in simulation mode")
+    # Create a dummy MT5Connector class for compatibility
+    class MT5Connector:
+        def __init__(self, *args, **kwargs):
+            self.connected = False
+            self.logger = None
+        def connect(self):
+            return False
+        def disconnect(self):
+            pass
 
 # Load environment variables
 load_dotenv()
@@ -176,8 +192,12 @@ class MT5TradingBot:
         
         # Initialize MT5 connector
         if self.use_mt5_data or self.auto_trade:
-            self.mt5_connector = MT5Connector()
-            self.connect_mt5()
+            if MT5_CONNECTOR_AVAILABLE:
+                self.mt5_connector = MT5Connector()
+                self.connect_mt5()
+            else:
+                self.logger.warning("MT5Connector not available - running in simulation mode")
+                self.connected = False
         
         # Try to load existing ML model on startup
         if self.use_ml:
@@ -196,6 +216,11 @@ class MT5TradingBot:
     
     def connect_mt5(self) -> bool:
         """Connect to MT5 and get account information"""
+        if not MT5_CONNECTOR_AVAILABLE:
+            self.logger.warning("MT5Connector not available - cannot connect")
+            self.connected = False
+            return False
+            
         if self.mt5_connector:
             self.connected = self.mt5_connector.connect()
             if self.connected:

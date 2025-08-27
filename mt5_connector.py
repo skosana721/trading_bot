@@ -18,6 +18,11 @@ import os
 from dotenv import load_dotenv
 from utils.backoff import backoff
 
+# Load environment variables
+load_dotenv()
+
+from typing import Any, Dict, List, Optional, Tuple
+
 # Try to import MetaTrader5
 try:
     import MetaTrader5 as mt5
@@ -25,11 +30,11 @@ try:
 except ImportError:
     MT5_AVAILABLE = False
     print("Warning: MetaTrader5 not available - MT5Connector will run in simulation mode")
-
-# Load environment variables
-load_dotenv()
-
-from typing import Any, Dict, List, Optional, Tuple
+    # Create a dummy mt5 module for compatibility
+    class DummyMT5:
+        def __getattr__(self, name):
+            return lambda *args, **kwargs: None
+    mt5 = DummyMT5()
 
 
 class MT5Connector:
