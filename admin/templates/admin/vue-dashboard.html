@@ -1,0 +1,116 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Vue.js Admin Dashboard - Trading Bot{% endblock %}
+
+{% block extra_css %}
+<style>
+    .login-card {
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+    }
+    .login-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 2rem;
+        text-align: center;
+    }
+    .login-body {
+        padding: 2rem;
+    }
+    .form-control {
+        border-radius: 10px;
+        border: 2px solid #e9ecef;
+        padding: 12px 15px;
+    }
+    .form-control:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+    }
+    .btn-login {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+        border-radius: 10px;
+        padding: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    .btn-login:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+    
+    /* Vue.js specific styles */
+    .vue-dashboard, .vue-trading-journal {
+        animation: fadeIn 0.5s ease-in;
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .card {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    
+    .card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+    }
+    
+    .badge {
+        font-size: 0.75em;
+    }
+    
+    .table th {
+        background-color: #f8f9fa;
+        border-top: none;
+        font-weight: 600;
+    }
+    
+    .modal-backdrop {
+        background-color: rgba(0, 0, 0, 0.5);
+    }
+    
+    .notification-container .alert {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        border: none;
+    }
+    
+    /* Loading states */
+    .spinner-border {
+        width: 2rem;
+        height: 2rem;
+        border-width: 0.2em;
+    }
+    
+    /* Responsive improvements */
+    @media (max-width: 768px) {
+        .card-body {
+            padding: 1rem;
+        }
+        
+        .table-responsive {
+            font-size: 0.875rem;
+        }
+        
+        .btn {
+            padding: 0.375rem 0.75rem;
+            font-size: 0.875rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="vue-admin-app">
+    <!-- Vue.js components will be mounted here -->
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/vue-admin.js') }}?v={{ range(1, 9999) | random }}"></script>
+{% endblock %}

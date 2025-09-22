@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Login - Trading Bot</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            color: #333;
+        }
+
+        .login-container {
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .login-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .login-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem;
+            text-align: center;
+            position: relative;
+        }
+
+        .login-header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="25" cy="25" r="1" fill="white" opacity="0.1"/><circle cx="75" cy="75" r="1" fill="white" opacity="0.1"/><circle cx="50" cy="10" r="0.5" fill="white" opacity="0.1"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
+            opacity: 0.3;
+        }
+
+        .login-header h3 {
+            position: relative;
+            z-index: 1;
+            margin-bottom: 0.5rem;
+            font-weight: 700;
+        }
+
+        .login-header p {
+            position: relative;
+            z-index: 1;
+            margin-bottom: 0;
+            opacity: 0.9;
+        }
+
+        .login-body {
+            padding: 2rem;
+        }
+
+        .form-control {
+            border-radius: 12px;
+            border: 2px solid #e2e8f0;
+            padding: 15px 20px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.9);
+        }
+
+        .form-control:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.3rem rgba(102, 126, 234, 0.15);
+            background: white;
+            transform: translateY(-1px);
+        }
+
+        .form-label {
+            font-weight: 600;
+            color: #4a5568;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-login {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 12px;
+            padding: 15px;
+            font-weight: 600;
+            font-size: 16px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-login::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .btn-login:hover::before {
+            left: 100%;
+        }
+
+        .btn-login:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-login:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .alert {
+            border: none;
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            margin-bottom: 20px;
+            animation: slideIn 0.3s ease;
+        }
+
+        .alert-danger {
+            background: rgba(245, 101, 101, 0.1);
+            color: #c53030;
+            border-left: 4px solid #f56565;
+        }
+
+        .alert-success {
+            background: rgba(72, 187, 120, 0.1);
+            color: #2f855a;
+            border-left: 4px solid #48bb78;
+        }
+
+        .spinner-border-sm {
+            width: 1rem;
+            height: 1rem;
+        }
+
+        .info-text {
+            background: rgba(102, 126, 234, 0.1);
+            border: 1px solid rgba(102, 126, 234, 0.2);
+            border-radius: 12px;
+            padding: 15px;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .info-text small {
+            color: #4a5568;
+            font-weight: 500;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        @media (max-width: 480px) {
+            .login-container {
+                padding: 10px;
+            }
+            
+            .login-body {
+                padding: 1.5rem;
+            }
+            
+            .login-header {
+                padding: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="login-container">
+            <div class="login-card">
+                <div class="login-header">
+                    <i class="fas fa-shield-alt fa-3x mb-3 pulse"></i>
+                    <h3>Admin Portal</h3>
+                    <p>Trading Bot Administration</p>
+                </div>
+                <div class="login-body">
+                    <!-- Alerts -->
+                    <div v-for="alert in alerts" :key="alert.id" 
+                         :class="`alert alert-${alert.type} alert-dismissible fade show`">
+                        <i :class="alertIcon(alert.type)"></i> {{ alert.message }}
+                        <button type="button" class="btn-close" @click="removeAlert(alert.id)"></button>
+                    </div>
+
+                    <!-- Flask Flash Messages -->
+                    {% if error %}
+                        <div class="alert alert-danger alert-dismissible fade show">
+                            <i class="fas fa-exclamation-triangle"></i> {{ error }}
+                        </div>
+                    {% endif %}
+                    
+                    <!-- Login Form -->
+                    <form @submit.prevent="handleLogin">
+                        <div class="mb-3">
+                            <label for="username" class="form-label">
+                                <i class="fas fa-user"></i> Username
+                            </label>
+                            <input 
+                                type="text" 
+                                class="form-control" 
+                                id="username" 
+                                v-model="loginForm.username" 
+                                required
+                                :disabled="loading"
+                                placeholder="Enter your username">
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label for="password" class="form-label">
+                                <i class="fas fa-lock"></i> Password
+                            </label>
+                            <input 
+                                type="password" 
+                                class="form-control" 
+                                id="password" 
+                                v-model="loginForm.password" 
+                                required
+                                :disabled="loading"
+                                placeholder="Enter your password">
+                        </div>
+                        
+                        <button 
+                            type="submit" 
+                            class="btn btn-primary btn-login w-100"
+                            :disabled="loading || !isFormValid">
+                            <span v-if="loading">
+                                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                Logging in...
+                            </span>
+                            <span v-else>
+                                <i class="fas fa-sign-in-alt"></i> Login
+                            </span>
+                        </button>
+                    </form>
+                    
+                    <div class="info-text">
+                        <small>
+                            <i class="fas fa-info-circle"></i>
+                            Default credentials: admin / admin123
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    loading: false,
+                    loginForm: {
+                        username: '',
+                        password: ''
+                    },
+                    alerts: []
+                }
+            },
+            computed: {
+                isFormValid() {
+                    return this.loginForm.username.trim() && this.loginForm.password.trim();
+                }
+            },
+            mounted() {
+                // Auto-focus username field
+                document.getElementById('username').focus();
+                
+                // Add enter key listener
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && this.isFormValid && !this.loading) {
+                        this.handleLogin();
+                    }
+                });
+            },
+            methods: {
+                async handleLogin() {
+                    if (!this.isFormValid) {
+                        this.showAlert('Please fill in all fields', 'error');
+                        return;
+                    }
+
+                    this.loading = true;
+                    
+                    try {
+                        const response = await axios.post('/admin/login', {
+                            username: this.loginForm.username,
+                            password: this.loginForm.password
+                        }, {
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        
+                        if (response.data.success) {
+                            this.showAlert('Login successful! Redirecting...', 'success');
+                            
+                            // Add a small delay for better UX
+                            setTimeout(() => {
+                                window.location.href = '/admin/dashboard';
+                            }, 1000);
+                        } else {
+                            this.showAlert('Login failed: ' + (response.data.error || 'Invalid credentials'), 'error');
+                        }
+                    } catch (error) {
+                        const errorMessage = error.response?.data?.error || error.message || 'Login failed';
+                        this.showAlert('Login failed: ' + errorMessage, 'error');
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                
+                showAlert(message, type = 'info', duration = 5000) {
+                    const alert = {
+                        id: Date.now() + Math.random(),
+                        message: message,
+                        type: type
+                    };
+                    
+                    this.alerts.push(alert);
+                    
+                    // Auto-remove alert after duration
+                    if (duration > 0) {
+                        setTimeout(() => {
+                            this.removeAlert(alert.id);
+                        }, duration);
+                    }
+                },
+                
+                removeAlert(alertId) {
+                    this.alerts = this.alerts.filter(alert => alert.id !== alertId);
+                },
+                
+                alertIcon(type) {
+                    const icons = {
+                        success: 'fas fa-check-circle',
+                        error: 'fas fa-exclamation-circle',
+                        warning: 'fas fa-exclamation-triangle',
+                        info: 'fas fa-info-circle'
+                    };
+                    return icons[type] || icons.info;
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

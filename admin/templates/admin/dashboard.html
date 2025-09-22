@@ -1,0 +1,359 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Admin Dashboard - Trading Bot{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4 text-white">
+            <i class="fas fa-tachometer-alt"></i> Admin Dashboard
+        </h1>
+    </div>
+</div>
+
+<!-- System Status Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="card-title">System Status</h4>
+                        <p class="card-text">{{ systemStatus }}</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-server fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="card-title">Trading Journal</h4>
+                        <p class="card-text">{{ journalCount }}</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-book fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="card-title">MT5 Connection</h4>
+                        <p class="card-text">{{ mt5Status }}</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-link fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="card-title">Active Bots</h4>
+                        <p class="card-text">{{ activeBots }}</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-robot fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-bolt"></i> Quick Actions
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3 mb-2">
+                        <button class="btn btn-outline-primary w-100" @click="exportJournal" :disabled="loading">
+                            <i class="fas fa-download"></i> Export Journal
+                        </button>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <button class="btn btn-outline-warning w-100" @click="clearJournal" :disabled="loading">
+                            <i class="fas fa-trash"></i> Clear Journal
+                        </button>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <button class="btn btn-outline-info w-100" @click="viewLogs" :disabled="loading">
+                            <i class="fas fa-file-alt"></i> View Logs
+                        </button>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <button class="btn btn-outline-success w-100" @click="createBackup" :disabled="loading">
+                            <i class="fas fa-save"></i> Create Backup
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- System Information -->
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-info-circle"></i> System Information
+                </h5>
+            </div>
+            <div class="card-body">
+                <div v-if="systemInfoLoading" class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+                <div v-else-if="systemInfo">
+                    <div class="row">
+                        <div class="col-6">
+                            <strong>CPU Cores:</strong><br>
+                            <strong>Memory:</strong><br>
+                            <strong>Disk:</strong><br>
+                            <strong>Processes:</strong>
+                        </div>
+                        <div class="col-6">
+                            {{ systemInfo.cpu_count }}<br>
+                            {{ systemInfo.memory.percent.toFixed(1) }}% used<br>
+                            {{ systemInfo.disk.percent.toFixed(1) }}% used<br>
+                            {{ systemInfo.processes }}
+                        </div>
+                    </div>
+                </div>
+                <div v-else class="text-center text-muted">
+                    No system information available
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-chart-line"></i> Trading Statistics
+                </h5>
+            </div>
+            <div class="card-body">
+                <div v-if="tradingStatsLoading" class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+                <div v-else-if="tradingStats">
+                    <div class="row">
+                        <div class="col-6">
+                            <strong>Total Trades:</strong><br>
+                            <strong>Win Rate:</strong><br>
+                            <strong>Total Profit:</strong><br>
+                            <strong>Net P&L:</strong>
+                        </div>
+                        <div class="col-6">
+                            {{ tradingStats.total_trades || 0 }}<br>
+                            {{ formatPercentage(tradingStats.win_rate || 0) }}<br>
+                            {{ formatCurrency(tradingStats.total_profit || 0) }}<br>
+                            <span :class="tradingStats.net_pnl >= 0 ? 'text-success' : 'text-danger'">
+                                {{ formatCurrency(tradingStats.net_pnl || 0) }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div v-else class="text-center text-muted">
+                    No trading statistics available
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Add dashboard-specific functionality to the global Vue app
+    document.addEventListener('DOMContentLoaded', function() {
+        if (window.AdminVueApp && window.currentVueApp) {
+            // Add dashboard data to the global app
+            Object.assign(window.currentVueApp, {
+                loading: false,
+                systemInfoLoading: true,
+                tradingStatsLoading: true,
+                systemStatus: 'Loading...',
+                journalCount: 'Loading...',
+                mt5Status: 'Loading...',
+                activeBots: 'Loading...',
+                systemInfo: null,
+                tradingStats: null,
+                refreshInterval: null
+            });
+
+            // Add dashboard methods
+            window.currentVueApp.loadDashboardData = async function() {
+                try {
+                    this.systemInfoLoading = true;
+                    this.tradingStatsLoading = true;
+                    
+                    // Load system status
+                    const systemResponse = await axios.get('/admin/system/status');
+                    if (systemResponse.data.success) {
+                        this.updateSystemInfo(systemResponse.data.system_info);
+                        this.systemStatus = 'Online';
+                        
+                        // Update MT5 status
+                        this.mt5Status = systemResponse.data.connected ? 'Connected' : 'Disconnected';
+                        
+                        // Update active bots count if we have MT5 info
+                        if (systemResponse.data.mt5_info) {
+                            this.activeBots = '1 Active';
+                        }
+                    }
+                    
+                    // Load trading journal count and stats
+                    const journalResponse = await axios.get('/admin/trading/journal/data?per_page=1');
+                    if (journalResponse.data.success) {
+                        this.journalCount = `${journalResponse.data.pagination.total_trades} trades`;
+                        this.tradingStats = journalResponse.data.statistics;
+                        this.tradingStatsLoading = false;
+                    }
+                    
+                    this.systemInfoLoading = false;
+                    
+                } catch (error) {
+                    console.error('Error loading dashboard data:', error);
+                    this.systemStatus = 'Error';
+                    this.journalCount = 'Error';
+                    this.mt5Status = 'Error';
+                    this.activeBots = 'Error';
+                    this.systemInfoLoading = false;
+                    this.tradingStatsLoading = false;
+                }
+            };
+
+            window.currentVueApp.updateSystemInfo = function(systemInfo) {
+                this.systemInfo = systemInfo;
+            };
+
+            window.currentVueApp.exportJournal = async function() {
+                this.loading = true;
+                try {
+                    const response = await axios.get('/admin/trading/journal/export');
+                    if (response.data.success) {
+                        // Create download link
+                        const dataStr = JSON.stringify(response.data.data, null, 2);
+                        const dataBlob = new Blob([dataStr], {type: 'application/json'});
+                        const url = URL.createObjectURL(dataBlob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = `trading_journal_${new Date().toISOString().split('T')[0]}.json`;
+                        link.click();
+                        URL.revokeObjectURL(url);
+                        this.showAlert('Journal exported successfully!', 'success');
+                    }
+                } catch (error) {
+                    this.showAlert('Failed to export journal: ' + error.message, 'error');
+                } finally {
+                    this.loading = false;
+                }
+            };
+
+            window.currentVueApp.clearJournal = async function() {
+                if (!confirm('Are you sure you want to clear the entire trading journal? This action cannot be undone.')) {
+                    return;
+                }
+                
+                this.loading = true;
+                try {
+                    const response = await axios.post('/admin/trading/journal/clear', {}, {
+                        headers: {
+                            'X-Admin-API-Key': 'admin-api-key'
+                        }
+                    });
+                    if (response.data.success) {
+                        this.showAlert('Trading journal cleared successfully!', 'success');
+                        this.loadDashboardData(); // Refresh data
+                    }
+                } catch (error) {
+                    this.showAlert('Failed to clear journal: ' + error.message, 'error');
+                } finally {
+                    this.loading = false;
+                }
+            };
+
+            window.currentVueApp.viewLogs = async function() {
+                this.loading = true;
+                try {
+                    const response = await axios.get('/admin/system/logs');
+                    if (response.data.success) {
+                        // Open logs in a new window or modal
+                        const logsWindow = window.open('', '_blank');
+                        logsWindow.document.write(`
+                            <html>
+                                <head><title>System Logs</title></head>
+                                <body>
+                                    <h1>System Logs</h1>
+                                    <pre>${response.data.logs.join('\n')}</pre>
+                                </body>
+                            </html>
+                        `);
+                    }
+                } catch (error) {
+                    this.showAlert('Failed to load logs: ' + error.message, 'error');
+                } finally {
+                    this.loading = false;
+                }
+            };
+
+            window.currentVueApp.createBackup = async function() {
+                this.loading = true;
+                try {
+                    const response = await axios.post('/admin/system/backup', {}, {
+                        headers: {
+                            'X-Admin-API-Key': 'admin-api-key'
+                        }
+                    });
+                    if (response.data.success) {
+                        this.showAlert(`Backup created: ${response.data.backup_name}`, 'success');
+                    }
+                } catch (error) {
+                    this.showAlert('Failed to create backup: ' + error.message, 'error');
+                } finally {
+                    this.loading = false;
+                }
+            };
+
+            // Initialize dashboard data
+            window.currentVueApp.loadDashboardData();
+            
+            // Refresh data every 30 seconds
+            window.currentVueApp.refreshInterval = setInterval(() => {
+                window.currentVueApp.loadDashboardData();
+            }, 30000);
+        }
+    });
+</script>
+{% endblock %}

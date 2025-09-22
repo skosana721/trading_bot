@@ -22,10 +22,6 @@ tensorflow==2.15.0
 # Technical Analysis
 TA-Lib==0.4.28
 
-# Visualization
-matplotlib==3.8.2
-plotly==5.17.0
-
 # MetaTrader 5 Integration (Windows only)
 MetaTrader5==5.0.45
 
@@ -37,11 +33,6 @@ python-dateutil==2.8.2
 
 # HTTP Requests (for yfinance)
 requests==2.31.0
-
-# Additional Utilities
-lxml==4.9.3
-html5lib==1.1
-beautifulsoup4==4.12.2
 
 # Note: This file is for Windows deployment with live trading enabled
 # Requires MetaTrader5 terminal to be installed on the server

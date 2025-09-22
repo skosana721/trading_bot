@@ -1,0 +1,41 @@
+# Enhanced Trading Bot Dependencies
+# Core ML and Data Science
+scikit-learn>=1.3.0
+numpy>=1.24.0
+pandas>=2.0.0
+scipy>=1.10.0
+
+# Advanced ML Libraries
+xgboost>=1.7.0
+lightgbm>=4.0.0
+catboost>=1.2.0
+
+# Deep Learning
+tensorflow>=2.13.0
+keras>=2.13.0
+
+# Text Processing and Sentiment Analysis
+textblob>=0.17.1
+requests>=2.31.0
+
+# Real-time Data Processing
+aiohttp>=3.8.0
+websockets>=11.0.0
+
+# Visualization
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Existing Dependencies
+MetaTrader5>=5.0.0
+flask>=2.3.0
+flask-cors>=4.0.0
+python-dotenv>=1.0.0
+ta>=0.10.0
+joblib>=1.3.0
+
+# Optional but Recommended
+plotly>=5.15.0
+dash>=2.11.0
+redis>=4.6.0
+celery>=5.3.0

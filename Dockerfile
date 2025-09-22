@@ -38,4 +38,4 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:5000/api/status || exit 1
 
 # Run the application with startup configuration
-CMD ["sh", "-c", "python startup.py && python app.py"]
+CMD ["sh", "-c", "python scripts/startup.py && python core/app.py"]

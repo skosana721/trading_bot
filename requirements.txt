@@ -22,10 +22,6 @@ tensorflow
 # Technical Analysis
 TA-Lib
 
-# Visualization
-matplotlib
-plotly
-
 # MetaTrader 5 Integration (not available on deployment platforms)
 MetaTrader5
 
@@ -36,9 +32,4 @@ python-dotenv
 python-dateutil
 
 # HTTP Requests (for yfinance)
-requests
-
-# Additional Utilities
-lxml
-html5lib
-beautifulsoup4 
+requests 

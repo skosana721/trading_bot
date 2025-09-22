@@ -1,0 +1,46 @@
+{
+  "risk_per_trade": 0.005,
+  "max_daily_risk": 0.015,
+  "max_concurrent_trades": 3,
+  "min_signal_strength": 0.8,
+  "min_risk_reward_ratio": 2.5,
+  "max_daily_trades": 5,
+  "min_trend_strength": 0.5,
+  "max_spread": 0.00015,
+  "preferred_sessions_only": true,
+  "require_multiple_confirmations": false,
+  "stop_trading_on_loss": true,
+  "min_win_rate_threshold": 0.4,
+  "supported_symbols": [
+    "EURUSD",
+    "GBPUSD", 
+    "USDJPY",
+    "AUDUSD",
+    "XAUUSD",
+    "US30",
+    "NAS100",
+    "BTCUSD"
+  ],
+  "symbol_specific_settings": {
+    "XAUUSD": {
+      "max_spread": 0.3,
+      "pip_size": 0.1,
+      "trading_hours": "24/5"
+    },
+    "US30": {
+      "max_spread": 2.0,
+      "pip_size": 1.0,
+      "trading_hours": "24/5"
+    },
+    "NAS100": {
+      "max_spread": 1.0,
+      "pip_size": 1.0,
+      "trading_hours": "24/5"
+    },
+    "BTCUSD": {
+      "max_spread": 10.0,
+      "pip_size": 1.0,
+      "trading_hours": "24/7"
+    }
+  }
+}

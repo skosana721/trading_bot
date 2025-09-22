@@ -24,10 +24,6 @@ tensorflow==2.15.0
 # ta-lib==0.4.28
 # Using 'ta' library instead which is more deployment-friendly
 
-# Visualization
-matplotlib==3.8.2
-plotly==5.17.0
-
 # Environment and Configuration
 python-dotenv==1.0.0
 
@@ -36,11 +32,6 @@ python-dateutil==2.8.2
 
 # HTTP Requests (for yfinance)
 requests==2.31.0
-
-# Additional Utilities
-lxml==4.9.3
-html5lib==1.1
-beautifulsoup4==4.12.2
 
 # Note: MetaTrader5 is excluded as it's not available on deployment platforms
 # The trading bot will run in simulation mode when deployed

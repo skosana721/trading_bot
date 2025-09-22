@@ -1,0 +1,241 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Vue.js Admin Login - Trading Bot{% endblock %}
+
+{% block extra_css %}
+<style>
+    body {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+    }
+    .login-card {
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+        animation: slideInUp 0.6s ease-out;
+    }
+    .login-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 2rem;
+        text-align: center;
+    }
+    .login-body {
+        padding: 2rem;
+    }
+    .form-control {
+        border-radius: 10px;
+        border: 2px solid #e9ecef;
+        padding: 12px 15px;
+        transition: all 0.3s ease;
+    }
+    .form-control:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        transform: translateY(-1px);
+    }
+    .btn-login {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+        border-radius: 10px;
+        padding: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+    .btn-login:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+    .btn-login:disabled {
+        opacity: 0.6;
+        transform: none;
+    }
+    .btn-login:disabled:hover {
+        transform: none;
+        box-shadow: none;
+    }
+    
+    @keyframes slideInUp {
+        from {
+            opacity: 0;
+            transform: translateY(50px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    .form-label {
+        font-weight: 600;
+        color: #495057;
+    }
+    
+    .form-label i {
+        margin-right: 8px;
+        color: #667eea;
+    }
+    
+    .text-muted {
+        font-size: 0.9rem;
+    }
+    
+    .text-muted i {
+        margin-right: 5px;
+        color: #6c757d;
+    }
+    
+    /* Vue.js specific animations */
+    .fade-enter-active, .fade-leave-active {
+        transition: opacity 0.5s ease;
+    }
+    .fade-enter-from, .fade-leave-to {
+        opacity: 0;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="vue-login-app">
+    <!-- Vue.js login component will be mounted here -->
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Vue.js Login App
+const { createApp, ref, reactive } = Vue;
+
+const LoginApp = createApp({
+    template: `
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-md-6 col-lg-4">
+                    <div class="login-card">
+                        <div class="login-header">
+                            <i class="fas fa-shield-alt fa-3x mb-3"></i>
+                            <h3>Admin Portal</h3>
+                            <p class="mb-0">Trading Bot Administration</p>
+                        </div>
+                        <div class="login-body">
+                            <form @submit.prevent="handleLogin">
+                                <div class="mb-3">
+                                    <label for="username" class="form-label">
+                                        <i class="fas fa-user"></i> Username
+                                    </label>
+                                    <input 
+                                        type="text" 
+                                        class="form-control" 
+                                        id="username" 
+                                        v-model="form.username" 
+                                        required
+                                        :disabled="loading"
+                                    >
+                                </div>
+                                <div class="mb-4">
+                                    <label for="password" class="form-label">
+                                        <i class="fas fa-lock"></i> Password
+                                    </label>
+                                    <input 
+                                        type="password" 
+                                        class="form-control" 
+                                        id="password" 
+                                        v-model="form.password" 
+                                        required
+                                        :disabled="loading"
+                                    >
+                                </div>
+                                <button 
+                                    type="submit" 
+                                    class="btn btn-primary btn-login w-100"
+                                    :disabled="loading"
+                                >
+                                    <span v-if="!loading">
+                                        <i class="fas fa-sign-in-alt"></i> Login
+                                    </span>
+                                    <span v-else>
+                                        <i class="fas fa-spinner fa-spin"></i> Logging in...
+                                    </span>
+                                </button>
+                            </form>
+                            <div class="text-center mt-4">
+                                <small class="text-muted">
+                                    <i class="fas fa-info-circle"></i>
+                                    Default credentials: admin / admin123
+                                </small>
+                            </div>
+                            
+                            <!-- Demo credentials for easy testing -->
+                            <div class="text-center mt-3">
+                                <button 
+                                    type="button" 
+                                    class="btn btn-outline-secondary btn-sm" 
+                                    @click="fillDemoCredentials"
+                                    :disabled="loading"
+                                >
+                                    <i class="fas fa-magic"></i> Fill Demo Credentials
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `,
+    setup() {
+        const form = reactive({
+            username: '',
+            password: ''
+        });
+        const loading = ref(false);
+        
+        const handleLogin = async () => {
+            loading.value = true;
+            try {
+                const response = await axios.post('/admin/login', {
+                    username: form.username,
+                    password: form.password
+                }, {
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.data.success) {
+                    // Redirect to dashboard
+                    window.location.href = '/admin/vue-dashboard';
+                } else {
+                    alert('Login failed: ' + response.data.error);
+                }
+            } catch (error) {
+                alert('Login failed: ' + (error.response?.data?.error || error.message));
+            } finally {
+                loading.value = false;
+            }
+        };
+        
+        const fillDemoCredentials = () => {
+            form.username = 'admin';
+            form.password = 'admin123';
+        };
+        
+        return {
+            form,
+            loading,
+            handleLogin,
+            fillDemoCredentials
+        };
+    }
+});
+
+// Mount the Vue app
+LoginApp.mount('#vue-login-app');
+</script>
+{% endblock %}
