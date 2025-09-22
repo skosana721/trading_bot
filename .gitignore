@@ -21,6 +21,18 @@ wheels/
 *.egg
 MANIFEST
 
+# Python cache files
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.py[cod]
+*$py.class
+
 # Virtual environments
 venv/
 env/
